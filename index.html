@@ -347,7 +347,7 @@
 
                 <div class="slider-container flex-col items-start gap-2">
                     <label for="object-size" class="text-gray-700 font-semibold">Dimensione Oggetto:</label>
-                    <input type="range" id="object-size" min="30" max="80" value="50">
+                    <input type="range" id="object-size" min="20" max="80" value="50">
                     <span id="object-size-value" class="text-gray-600">50px</span>
                 </div>
 
@@ -993,7 +993,6 @@
                 } else if (item.type === 'dribble') {
                     // Per la conduzione, il hit testing è più complesso a causa della curva.
                     // Semplifichiamo controllando i punti di inizio e fine, o un bounding box approssimato.
-                    // Per maggiore precisione, si potrebbe campionare la curva e controllare ogni segmento.
                     // Per ora, un bounding box è sufficiente per il trascinamento.
                     const minX = Math.min(item.startX, item.endX);
                     const maxX = Math.max(item.startX, item.endX);
@@ -1022,8 +1021,6 @@
                         dragOffsetY = y - item.y;
                     }
                     
-                    // *** MODIFICA: Rimosso il messaggio di selezione disegno ***
-                    // showMessage(`Disegno selezionato: ${item.type}`);
                     // Aggiungi listener globali per il trascinamento del disegno
                     document.addEventListener('mousemove', dragDrawingOnCanvas);
                     document.addEventListener('mouseup', stopDrawingDragOnCanvas);
@@ -1412,9 +1409,6 @@
                             targetElement.focus(); // Metti il focus per permettere la modifica immediata
                         }
                     }
-
-                    // *** MODIFICA: Rimosso il messaggio di selezione oggetto ***
-                    // showMessage(`Oggetto selezionato: ${selectedObject.type === 'player' || selectedObject.type === 'goalkeeper' ? selectedObject.number : selectedObject.type}`);
                     
                     // Inizia il trascinamento
                     draggingObject = selectedObject;
@@ -1466,6 +1460,7 @@
             // Limit object within canvas bounds (unscaled coordinates)
             // Per gli oggetti testo, la dimensione non è fissa, quindi usiamo la larghezza/altezza corrente del div
             const objectElement = document.getElementById(draggingObject.id);
+            // Assicurati che currentObjWidth e currentObjHeight siano sempre positivi
             const currentObjWidth = Math.max(1, draggingObject.type === 'text' ? objectElement.offsetWidth / currentZoomLevel : draggingObject.size);
             const currentObjHeight = Math.max(1, draggingObject.type === 'text' ? objectElement.offsetHeight / currentZoomLevel : draggingObject.size);
 
@@ -2398,8 +2393,8 @@
                 const id = `object-${Date.now()}`; // ID univoco per l'oggetto
 
                 // *** MODIFICA: Riduzione delle dimensioni di default per una migliore visualizzazione mobile ***
-                const defaultObjectSize = 30; // Dimensione di default ridotta per i nuovi oggetti (prima era 35)
-                const defaultTextSize = 14;   // Dimensione di default ridotta per il testo (prima era 16)
+                const defaultObjectSize = 25; // Dimensione di default ridotta per i nuovi oggetti (prima era 30)
+                const defaultTextSize = 12;   // Dimensione di default ridotta per il testo (prima era 14)
 
                 let objectObj = {
                     id: id,
