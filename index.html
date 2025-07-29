@@ -723,7 +723,6 @@
                 // Draw Goal Area Box
                 ctx.strokeRect(goalAreaX, goalAreaY, goalAreaDepth, goalAreaWidth);
 
-                // Draw Penalty Spot
                 ctx.beginPath();
                 ctx.arc(penaltySpotX, penaltySpotY, 3, 0, Math.PI * 2);
                 ctx.fill();
@@ -912,6 +911,13 @@
             // Use canvas.offsetWidth and canvas.width for accurate scaling
             const x = relativeX_screen * (canvas.width / canvas.offsetWidth);
             const y = relativeY_screen * (canvas.height / canvas.offsetHeight);
+
+            // Add logging for debugging coordinates on mobile
+            // console.log(`Raw: clientX=${clientX}, clientY=${clientY}`);
+            // console.log(`Rect: left=${rect.left}, top=${rect.top}, width=${rect.width}, height=${rect.height}`);
+            // console.log(`Canvas: offsetWidth=${canvas.offsetWidth}, offsetHeight=${canvas.offsetHeight}, width=${canvas.width}, height=${canvas.height}`);
+            // console.log(`Calculated unscaled: x=${x}, y=${y}`);
+
             return { x, y };
         }
 
@@ -1452,8 +1458,10 @@
 
             // Limit object within canvas bounds (unscaled coordinates)
             // Per gli oggetti testo, la dimensione non è fissa, quindi usiamo la larghezza/altezza corrente del div
-            const currentObjWidth = draggingObject.type === 'text' ? document.getElementById(draggingObject.id).offsetWidth / currentZoomLevel : draggingObject.size;
-            const currentObjHeight = draggingObject.type === 'text' ? document.getElementById(draggingObject.id).offsetHeight / currentZoomLevel : draggingObject.size;
+            const objectElement = document.getElementById(draggingObject.id);
+            const currentObjWidth = Math.max(1, draggingObject.type === 'text' ? objectElement.offsetWidth / currentZoomLevel : draggingObject.size);
+            const currentObjHeight = Math.max(1, draggingObject.type === 'text' ? objectElement.offsetHeight / currentZoomLevel : draggingObject.size);
+
 
             newX = Math.max(0, Math.min(newX, BASE_FIELD_WIDTH - currentObjWidth));
             newY = Math.max(0, Math.min(newY, BASE_FIELD_HEIGHT - currentObjHeight));
@@ -1461,7 +1469,6 @@
             draggingObject.x = newX;
             draggingObject.y = newY;
 
-            const objectElement = document.getElementById(draggingObject.id);
             if (objectElement) {
                 objectElement.style.left = `${newX * currentZoomLevel}px`;
                 objectElement.style.top = `${newY * currentZoomLevel}px`;
@@ -2383,8 +2390,9 @@
                 const emoji = emojiMap[objectType]; // Solo per oggetti con emoji predefiniti
                 const id = `object-${Date.now()}`; // ID univoco per l'oggetto
 
-                const defaultObjectSize = 50; // Dimensione di default per i nuovi oggetti
-                const defaultTextSize = 20; // Dimensione di default per il testo
+                // *** MODIFICA: Riduzione delle dimensioni di default per una migliore visualizzazione mobile ***
+                const defaultObjectSize = 35; // Dimensione di default ridotta per i nuovi oggetti (prima era 50)
+                const defaultTextSize = 16;   // Dimensione di default ridotta per il testo (prima era 20)
 
                 // Posiziona l'oggetto al centro del canvas inizialmente (coordinate non scalate)
                 const initialX = BASE_FIELD_WIDTH / 2 - defaultObjectSize / 2;
