@@ -17,12 +17,12 @@
             font-family: 'Inter', sans-serif;
             background-color: #f0f4f8; /* Sfondo leggero */
             display: flex;
-            justify-content: center;
-            align-items: center; /* Centra verticalmente il container */
-            min-height: 100vh;
+            flex-direction: column; /* Permette ai contenuti di scorrere verticalmente */
+            /* rimosso justify-content: center; e align-items: center; per permettere lo scrolling */
+            min-height: 100vh; /* Mantiene l'altezza minima per il layout */
             padding: 20px;
             box-sizing: border-box;
-            touch-action: none; /* Impedisce lo scrolling del browser su touch per l'intera pagina */
+            /* touch-action: none; RIMOSSO DA QUI per permettere lo scrolling della pagina */
         }
         .container {
             background-color: #ffffff;
@@ -34,6 +34,7 @@
             display: flex;
             flex-direction: column;
             gap: 20px;
+            margin: 0 auto; /* Centra il contenitore orizzontalmente */
         }
         @media (min-width: 768px) {
             .container {
@@ -1163,7 +1164,7 @@
                         const rectTop = Math.min(item.y, item.y + item.height);
                         const rectBottom = Math.max(item.y, item.y + item.height);
                         return !(eraseX > rectLeft - eraseRadius && eraseX < rectRight + eraseRadius &&
-                                 eraseY > rectTop - eraseRadius && eraseY > rectBottom + eraseRadius); // Fixed: was < rectBottom
+                                 eraseY > rectTop - eraseRadius && eraseY > rectBottom + eraseRadius);
                     }
                     return true;
                 });
