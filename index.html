@@ -22,6 +22,7 @@
             min-height: 100vh;
             padding: 20px;
             box-sizing: border-box;
+            touch-action: none; /* Impedisce lo scrolling del browser su touch per l'intera pagina */
         }
         .container {
             background-color: #ffffff;
@@ -50,7 +51,7 @@
             border: 2px solid #cbd5e0; /* Bordo sottile per la lavagna */
             background-color: #e2e8f0; /* Sfondo del campo */
             cursor: crosshair; /* Cursore a croce per il disegno */
-            touch-action: none; /* Impedisce lo scrolling del browser su touch */
+            touch-action: none; /* Impedisce lo scrolling del browser su touch per il canvas */
             border-radius: 10px;
             width: 100%; /* La larghezza del canvas si adatta al contenitore */
             height: auto; /* L'altezza si adatta per mantenere l'aspetto */
@@ -76,21 +77,23 @@
             box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
         }
         .player-icon {
+            position: absolute; /* Keep absolute positioning */
+            transform: translate(-50%, -50%) rotate(var(--rotation, 0deg)); /* Use CSS variable for rotation */
             cursor: grab;
             user-select: none;
-            transition: transform 0.1s ease-out;
-            position: absolute; /* Permette il posizionamento libero sul canvas */
-            line-height: 1; /* Rimuove spazio extra sopra/sotto l'emoji */
-            transform-origin: center center; /* Punto di origine per il ridimensionamento e rotazione */
-            border: 2px solid transparent; /* Bordo invisibile per selezione */
-            box-sizing: border-box; /* Include padding/border nel calcolo della dimensione */
-            display: flex; /* Per centrare contenuto SVG/emoji */
+            transition: transform 0.1s ease-out; /* Keep transition for non-dragging states */
+            line-height: 1;
+            border: 2px solid transparent;
+            box-sizing: border-box;
+            display: flex;
             justify-content: center;
             align-items: center;
+            touch-action: none; /* Prevents touch scrolling on the object itself */
         }
         .player-icon.dragging {
             cursor: grabbing;
             opacity: 0.7;
+            transition: none; /* Disable transition during dragging */
         }
         .player-icon.selected {
             border-color: #3b82f6; /* Bordo blu per l'oggetto selezionato */
@@ -508,8 +511,8 @@
         let objects = []; // Array per memorizzare tutti gli oggetti (giocatori, coni, ecc.)
         let draggingObject = null;
         let selectedObject = null; // Oggetto HTML attualmente selezionato per il ridimensionamento/rotazione/colore
-        let objectOffsetX = 0; // Offset del mouse rispetto all'angolo in alto a sinistra dell'oggetto (in coordinate del canvas non scalate)
-        let objectOffsetY = 0; // Offset del mouse rispetto all'angolo in alto a sinistra dell'oggetto (in coordinate del canvas non scalate)
+        let objectOffsetX = 0; // Offset del mouse rispetto al centro dell'oggetto (in coordinate del canvas non scalate)
+        let objectOffsetY = 0; // Offset del mouse rispetto al centro dell'oggetto (in coordinate del canvas non scalate)
         
         let selectedDrawing = null; // Disegno canvas attualmente selezionato
         let draggingDrawing = null; // Disegno canvas attualmente trascinato
@@ -556,12 +559,10 @@
 
         // Funzione per mostrare messaggi all'utente
         function showMessage(message, duration = 2000) {
-            // *** MODIFICA: Non mostrare più il messaggio se è un messaggio di selezione oggetto/disegno ***
+            // Non mostrare messaggi di selezione oggetto/disegno
             if (message.startsWith("Oggetto selezionato:") || message.startsWith("Disegno selezionato:")) {
-                console.log("Suppressing selection message:", message);
                 return;
             }
-            console.log("Showing message:", message);
             messageBox.textContent = message;
             messageBox.classList.add('show');
             setTimeout(() => {
@@ -571,18 +572,13 @@
 
         // Funzione per ridimensionare il canvas e disegnare il campo
         function resizeCanvas() {
-            console.log("Resizing canvas...");
             // Imposta la dimensione interna del canvas (buffer di disegno) a dimensioni fisse logiche
             canvas.width = BASE_FIELD_WIDTH;
             canvas.height = BASE_FIELD_HEIGHT;
 
-            // Il CSS "width: 100%; height: auto;" nel tag <style> gestirà l'adattamento al contenitore
-            // La scala di disegno verrà applicata tramite ctx.scale()
-
             drawField();
             // Ridisegna tutti gli elementi esistenti dopo il ridimensionamento
             redrawAllElements();
-            console.log(`Canvas internal size: ${canvas.width}x${canvas.height} (unscaled).`);
         }
 
         // Funzione per disegnare il campo di calcio
@@ -852,10 +848,10 @@
             objects.forEach(obj => {
                 const objectElement = document.getElementById(obj.id);
                 if (objectElement) {
-                    // Scala la posizione e la dimensione visiva dell'elemento HTML
+                    // Scala la posizione del centro dell'elemento HTML
                     objectElement.style.left = `${obj.x * currentZoomLevel}px`;
                     objectElement.style.top = `${obj.y * currentZoomLevel}px`;
-                    objectElement.style.transform = `rotate(${obj.rotation}deg)`; // Applica rotazione
+                    objectElement.style.setProperty('--rotation', `${obj.rotation}deg`); // Applica rotazione tramite CSS variable
                     
                     // Applica colori maglia e numero se è un giocatore/portiere
                     if (obj.type === 'player' || obj.type === 'goalkeeper') {
@@ -916,12 +912,6 @@
             // Use canvas.offsetWidth and canvas.width for accurate scaling
             const x = relativeX_screen * (canvas.width / canvas.offsetWidth);
             const y = relativeY_screen * (canvas.height / canvas.offsetHeight);
-
-            // Add logging for debugging coordinates on mobile
-            // console.log(`Raw: clientX=${clientX}, clientY=${clientY}`);
-            // console.log(`Rect: left=${rect.left}, top=${rect.top}, width=${rect.width}, height=${rect.height}`);
-            // console.log(`Canvas: offsetWidth=${canvas.offsetWidth}, offsetHeight=${canvas.offsetHeight}, width=${canvas.width}, height=${canvas.height}`);
-            // console.log(`Calculated unscaled: x=${x}, y=${y}`);
 
             return { x, y };
         }
@@ -1083,16 +1073,13 @@
 
         // Inizia il disegno sul canvas (non per gli oggetti)
         function startDrawing(e) {
-            console.log("startDrawing triggered. Current tool:", currentTool);
             // Se stiamo trascinando un oggetto HTML o un disegno canvas, non iniziare un nuovo disegno qui.
             if (draggingObject || draggingDrawing) {
-                console.log("startDrawing prevented: dragging object or drawing.");
                 return;
             }
 
             // Se lo strumento corrente è 'select', la gestione del clic è demandata a handleCanvasSelect o handleObjectMousedown.
             if (currentTool === 'select') {
-                console.log("startDrawing prevented: tool is select.");
                 return;
             }
 
@@ -1103,24 +1090,23 @@
 
             // Controlla se il clic è su un oggetto per iniziare il disegno da lì
             const clickedObject = objects.find(obj => {
-                const objLeft = obj.x;
-                const objTop = obj.y;
-                const objWidth = obj.type === 'text' ? obj.currentWidth : obj.size;
-                const objHeight = obj.type === 'text' ? obj.currentHeight : obj.size;
-                const objRight = obj.x + objWidth;
-                const objBottom = obj.y + objHeight;
-                const tolerance = 10 / currentZoomLevel;
+                // Adjust obj.x and obj.y to be top-left for hit testing, as objects are stored with center coordinates
+                const objHalfWidth = (obj.type === 'text' ? obj.currentWidth : obj.size) / 2;
+                const objHalfHeight = (obj.type === 'text' ? obj.currentHeight : obj.size) / 2;
+                const objLeft = obj.x - objHalfWidth;
+                const objTop = obj.y - objHalfHeight;
+                const objRight = obj.x + objHalfWidth;
+                const objBottom = obj.y + objHalfHeight;
+                const tolerance = 10 / currentZoomLevel; // Adjust tolerance based on zoom
                 return x >= objLeft - tolerance && x <= objRight + tolerance &&
                        y >= objTop - tolerance && y <= objBottom + tolerance;
             });
 
             if (clickedObject && (currentTool === 'pass' || currentTool === 'run' || currentTool === 'dribble' || currentTool === 'shot')) {
-                drawingStartPoint = { x: clickedObject.x + (clickedObject.type === 'text' ? clickedObject.currentWidth / 2 : clickedObject.size / 2),
-                                      y: clickedObject.y + (clickedObject.type === 'text' ? clickedObject.currentHeight / 2 : clickedObject.size / 2) };
-                console.log("Drawing started from clicked object center:", drawingStartPoint);
+                // Start drawing from the center of the clicked object
+                drawingStartPoint = { x: clickedObject.x, y: clickedObject.y };
             } else {
                 drawingStartPoint = { x, y };
-                console.log("Drawing started from mouse position:", drawingStartPoint);
             }
 
             if (currentTool === 'pass' || currentTool === 'run' || currentTool === 'shot' || currentTool === 'circle' || currentTool === 'rectangle' || currentTool === 'dribble') {
@@ -1177,7 +1163,7 @@
                         const rectTop = Math.min(item.y, item.y + item.height);
                         const rectBottom = Math.max(item.y, item.y + item.height);
                         return !(eraseX > rectLeft - eraseRadius && eraseX < rectRight + eraseRadius &&
-                                 eraseY > rectTop - eraseRadius && eraseY < rectBottom + eraseRadius);
+                                 eraseY > rectTop - eraseRadius && eraseY > rectBottom + eraseRadius); // Fixed: was < rectBottom
                     }
                     return true;
                 });
@@ -1341,7 +1327,6 @@
 
         // Ferma il disegno
         function stopDrawing() {
-            console.log("stopDrawing triggered.");
             drawing = false;
             ctx.setLineDash([]); // Resetta il line dash
             if (isRecording) {
@@ -1357,9 +1342,6 @@
             // Se lo strumento corrente è 'select', allora gestisci il trascinamento e la selezione
             if (currentTool === 'select') {
                 e.preventDefault(); // Impedisce il trascinamento di default del browser o lo scrolling
-
-                console.log("--- handleObjectMousedown Triggered (Select Tool) ---");
-                console.log("Target Element:", targetElement.id);
 
                 // Deseleziona qualsiasi oggetto o disegno precedentemente selezionato
                 if (selectedObject && selectedObject.id !== targetElement.id) {
@@ -1377,7 +1359,6 @@
 
                 selectedObject = objects.find(obj => obj.id === targetElement.id);
                 if (selectedObject) {
-                    console.log("Selected Object (before drag):", JSON.parse(JSON.stringify(selectedObject)));
                     targetElement.classList.add('selected');
                     objectControls.classList.remove('hidden'); // Mostra i controlli
                     objectSizeInput.value = selectedObject.size;
@@ -1416,18 +1397,9 @@
 
                     const { x, y } = getCoordinates(e); // Mouse position in unscaled canvas coordinates
 
-                    // Calculate offset from mouse to object's top-left corner
+                    // Calculate offset from mouse to object's center (obj.x, obj.y are now center coordinates)
                     objectOffsetX = x - selectedObject.x;
                     objectOffsetY = y - selectedObject.y;
-
-                    console.log("Start Drag Data:", {
-                        selectedObjectX: selectedObject.x,
-                        selectedObjectY: selectedObject.y,
-                        mouseX_unscaledCanvas: x,
-                        mouseY_unscaledCanvas: y,
-                        objectOffsetX: objectOffsetX,
-                        objectOffsetY: objectOffsetY
-                    });
 
                     // Attach global listeners for dragging
                     document.addEventListener('mousemove', dragObject);
@@ -1436,13 +1408,10 @@
                     document.addEventListener('touchend', stopObjectDrag);
                     document.addEventListener('touchcancel', stopObjectDrag);
 
-                } else {
-                    console.log("handleObjectMousedown: selectedObject not found for target.id", targetElement.id);
                 }
             } else {
                 // Se lo strumento corrente NON è 'select' (cioè è uno strumento di disegno),
                 // non fare nulla qui e lascia che l'evento si propaghi al canvas.
-                console.log(`Object clicked with drawing tool (${currentTool}). Letting canvas handle it.`);
             }
         }
 
@@ -1457,24 +1426,43 @@
             let newX = x - objectOffsetX;
             let newY = y - objectOffsetY;
 
-            // Limit object within canvas bounds (unscaled coordinates)
-            // Per gli oggetti testo, la dimensione non è fissa, quindi usiamo la larghezza/altezza corrente del div
+            // Get actual dimensions of the HTML element to correctly clamp its position
             const objectElement = document.getElementById(draggingObject.id);
-            // Assicurati che currentObjWidth e currentObjHeight siano sempre positivi
-            const currentObjWidth = Math.max(1, draggingObject.type === 'text' ? objectElement.offsetWidth / currentZoomLevel : draggingObject.size);
-            const currentObjHeight = Math.max(1, draggingObject.type === 'text' ? objectElement.offsetHeight / currentZoomLevel : draggingObject.size);
+            let currentObjWidth = 0;
+            let currentObjHeight = 0;
 
+            if (draggingObject.type === 'text') {
+                // For text, use its current rendered dimensions (which might be affected by contenteditable resize)
+                currentObjWidth = objectElement.offsetWidth / currentZoomLevel;
+                currentObjHeight = objectElement.offsetHeight / currentZoomLevel;
+            } else if (draggingObject.type === 'pole') {
+                currentObjWidth = 5;
+                currentObjHeight = 50;
+            } else if (draggingObject.type === 'obstacle') {
+                currentObjWidth = draggingObject.size * 1.5;
+                currentObjHeight = draggingObject.size * 0.75;
+            } else if (draggingObject.type === 'ladder') {
+                currentObjWidth = draggingObject.size;
+                currentObjHeight = draggingObject.size * (100/60);
+            } else {
+                // For other objects (player, ball, cone, gate), use their 'size' property
+                currentObjWidth = draggingObject.size;
+                currentObjHeight = draggingObject.size;
+            }
 
-            newX = Math.max(0, Math.min(newX, BASE_FIELD_WIDTH - currentObjWidth));
-            newY = Math.max(0, Math.min(newY, BASE_FIELD_HEIGHT - currentObjHeight));
+            // Clamp newX and newY to ensure the object's *center* stays within canvas bounds
+            const halfWidth = currentObjWidth / 2;
+            const halfHeight = currentObjHeight / 2;
+
+            newX = Math.max(halfWidth, Math.min(newX, BASE_FIELD_WIDTH - halfWidth));
+            newY = Math.max(halfHeight, Math.min(newY, BASE_FIELD_HEIGHT - halfHeight));
 
             draggingObject.x = newX;
             draggingObject.y = newY;
 
-            if (objectElement) {
-                objectElement.style.left = `${newX * currentZoomLevel}px`;
-                objectElement.style.top = `${newY * currentZoomLevel}px`;
-            }
+            // Update the CSS position of the HTML element
+            objectElement.style.left = `${newX * currentZoomLevel}px`;
+            objectElement.style.top = `${newY * currentZoomLevel}px`;
 
             if (isRecording) {
                 recordFrame();
@@ -1484,7 +1472,6 @@
         // Funzione per gestire la fine del trascinamento dell'oggetto HTML
         function stopObjectDrag() {
             if (draggingObject) {
-                console.log("--- STOP DRAG ---");
                 const objectElement = document.getElementById(draggingObject.id);
                 if (objectElement) {
                     objectElement.classList.remove('dragging');
@@ -1496,7 +1483,6 @@
                         draggingObject.currentHeight = objectElement.offsetHeight / currentZoomLevel;
                     }
                 }
-                console.log("Final Object Position:", JSON.parse(JSON.stringify(draggingObject)));
                 draggingObject = null;
                 if (isRecording) {
                     recordFrame(); // Registra lo stato finale per l'animazione
@@ -1514,8 +1500,8 @@
         function recordFrame() {
             const currentObjectsState = objects.map(obj => ({
                 id: obj.id,
-                x: obj.x, // Coordinate non scalate
-                y: obj.y, // Coordinate non scalate
+                x: obj.x, // Coordinate non scalate (centro)
+                y: obj.y, // Coordinate non scalate (centro)
                 type: obj.type,
                 emoji: obj.emoji,
                 size: obj.size, // Dimensione non scalata (per font-size del testo)
@@ -1580,7 +1566,7 @@
                                 // Applica la scala alla posizione e dimensione visiva
                                 objectElement.style.left = `${obj.x * currentZoomLevel}px`;
                                 objectElement.style.top = `${obj.y * currentZoomLevel}px`;
-                                objectElement.style.transform = `rotate(${obj.rotation}deg)`;
+                                objectElement.style.setProperty('--rotation', `${obj.rotation}deg`);
 
                                 if (obj.type === 'player' || obj.type === 'goalkeeper') {
                                     objectElement.style.width = `${obj.size * currentZoomLevel}px`;
@@ -1593,20 +1579,20 @@
                                     objectElement.style.height = `${obj.size * currentZoomLevel}px`;
                                     objectElement.style.fontSize = `${obj.size * currentZoomLevel}px`;
                                 } else if (obj.type === 'cone' || obj.type === 'ladder' || obj.type === 'pole' || obj.type === 'obstacle') {
-                                    objectElement.style.width = `${obj.size * currentZoomLevel}px`;
-                                    objectElement.style.height = `${obj.size * currentZoomLevel}px`;
-                                    if (obj.type === 'obstacle') { // Specific scaling for obstacle
-                                        objectElement.style.width = `${obj.size * currentZoomLevel * 1.5}px`;
-                                        objectElement.style.height = `${obj.size * currentZoomLevel * 0.75}px`;
-                                    } else if (obj.type === 'ladder') {
-                                        objectElement.style.height = `${obj.size * currentZoomLevel * (100/60)}px`;
-                                    } else if (obj.type === 'pole') {
-                                        objectElement.style.width = `${5 * currentZoomLevel}px`;
-                                        objectElement.style.height = `${50 * currentZoomLevel}px`;
-                                    }
                                     objectElement.style.color = obj.color;
                                     if (obj.type === 'pole') {
                                         objectElement.style.backgroundColor = obj.color;
+                                        objectElement.style.width = `${5 * currentZoomLevel}px`;
+                                        objectElement.style.height = `${50 * currentZoomLevel}px`;
+                                    } else if (obj.type === 'obstacle') {
+                                        objectElement.style.width = `${obj.size * currentZoomLevel * 1.5}px`;
+                                        objectElement.style.height = `${obj.size * currentZoomLevel * 0.75}px`;
+                                    } else if (obj.type === 'ladder') {
+                                        objectElement.style.width = `${obj.size * currentZoomLevel}px`;
+                                        objectElement.style.height = `${obj.size * currentZoomLevel * (100/60)}px`;
+                                    } else { // Cone
+                                        objectElement.style.width = `${obj.size * currentZoomLevel}px`;
+                                        objectElement.style.height = `${obj.size * currentZoomLevel}px`;
                                     }
                                 } else if (obj.type === 'text') {
                                     objectElement.textContent = obj.text;
@@ -1664,7 +1650,6 @@
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('service-worker.js')
                     .then(registration => {
-                        console.log('Service Worker registrato con successo:', registration);
                         showMessage('App pronta per l\'uso offline!');
                     })
                     .catch(error => {
@@ -1700,7 +1685,6 @@
         // Gestione selezione strumento
         toolButtons.forEach(button => {
             button.addEventListener('click', () => {
-                console.log("Tool button clicked:", button.id);
                 toolButtons.forEach(btn => btn.classList.remove('active', 'bg-blue-500', 'text-white'));
                 toolButtons.forEach(btn => {
                     if (!btn.classList.contains('bg-red-400')) { // Evita di cambiare colore alla gomma
@@ -1726,7 +1710,6 @@
                             document.getElementById(selectedObject.id).removeAttribute('contenteditable');
                         }
                         selectedObject = null;
-                        console.log("Deselecting object because tool is not 'select'.");
                     }
                     if (selectedDrawing) {
                         selectedDrawing = null;
@@ -1801,7 +1784,7 @@
                 objectRotationValueSpan.textContent = `${selectedObject.rotation}°`;
                 const objectElement = document.getElementById(selectedObject.id);
                 if (objectElement) {
-                    objectElement.style.transform = `rotate(${selectedObject.rotation}deg)`;
+                    objectElement.style.setProperty('--rotation', `${selectedObject.rotation}deg`);
                 }
                 if (isRecording) {
                     recordFrame();
@@ -1921,7 +1904,7 @@
             const originalClearClick = clearButton.onclick; 
             clearButton.onclick = () => { // Cambia la funzione onclick per la conferma
                 // Pulisci i disegni
-                drawingHistory = []; // *** CORREZIONE: Pulisce anche la cronologia dei disegni ***
+                drawingHistory = []; // Pulisce anche la cronologia dei disegni
                 // Rimuovi tutti gli oggetti HTML dal DOM
                 objects.forEach(obj => {
                     const objectElement = document.getElementById(obj.id);
@@ -2260,7 +2243,7 @@
                 const scaledSize = obj.size * saveScale;
 
                 tempCtx.save(); // Salva lo stato del contesto
-                tempCtx.translate(scaledX + scaledSize / 2, scaledY + scaledSize / 2);
+                tempCtx.translate(scaledX, scaledY); // Translate to the center of the object
                 tempCtx.rotate(obj.rotation * Math.PI / 180); // Applica la rotazione in radianti
 
                 if (obj.type === 'player' || obj.type === 'goalkeeper') {
@@ -2280,8 +2263,8 @@
                     tempCtx.textBaseline = 'middle';
                     tempCtx.fillText(obj.number, 0, 0);
                 } else if (obj.type === 'ball') {
-                    // Disegna la palla da calcio stilizzata
-                    drawSoccerBall(tempCtx, -scaledSize / 2, -scaledSize / 2, scaledSize, 0); // Rotation handled by translate/rotate above
+                    // Draw the stylized soccer ball centered at (0,0) relative to current translation
+                    drawSoccerBall(tempCtx, -scaledSize / 2, -scaledSize / 2, scaledSize, 0);
                 } else if (obj.type === 'gate') {
                     tempCtx.font = `${scaledSize}px Arial`; // Usa la dimensione scalata per il font emoji
                     tempCtx.textAlign = 'center';
@@ -2294,8 +2277,10 @@
                     const ladderHeight = scaledSize * (100/60); // Mantieni proporzioni 60x100
                     await drawSvgOnCanvas(tempCtx, SVG_LADDER, -ladderWidth / 2, -ladderHeight / 2, ladderWidth, ladderHeight, 0, obj.color);
                 } else if (obj.type === 'pole') {
+                    const poleWidth = 5 * saveScale;
+                    const poleHeight = 50 * saveScale;
                     tempCtx.fillStyle = obj.color;
-                    tempCtx.fillRect(-scaledSize / 10, -scaledSize / 2, scaledSize / 5, scaledSize);
+                    tempCtx.fillRect(-poleWidth / 2, -poleHeight / 2, poleWidth, poleHeight);
                 } else if (obj.type === 'obstacle') {
                     const obstacleWidth = scaledSize * 1.5; // Make obstacle wider
                     const obstacleHeight = scaledSize * 0.75; // Make obstacle shorter
@@ -2305,25 +2290,23 @@
                     tempCtx.font = `${obj.size * saveScale}px Inter, sans-serif`; // Use obj.size for font size
                     tempCtx.textAlign = 'left';
                     tempCtx.textBaseline = 'top';
-                    // Per il testo, disegniamo su un rettangolo che rappresenta la dimensione del div
-                    const textX = -obj.currentWidth / 2 * saveScale; // Relative to current translation
-                    const textY = -obj.currentHeight / 2 * saveScale; // Relative to current translation
+                    // For text, draw from its top-left corner relative to the current translation
                     const textWidth = obj.currentWidth * saveScale;
                     const textHeight = obj.currentHeight * saveScale;
 
-                    // Disegna lo sfondo del testo
+                    // Draw the background of the text, centered
                     tempCtx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-                    tempCtx.fillRect(textX, textY, textWidth, textHeight);
+                    tempCtx.fillRect(-textWidth / 2, -textHeight / 2, textWidth, textHeight);
                     tempCtx.strokeStyle = 'black';
                     tempCtx.lineWidth = 1;
-                    tempCtx.strokeRect(textX, textY, textWidth, textHeight);
+                    tempCtx.strokeRect(-textWidth / 2, -textHeight / 2, textWidth, textHeight);
 
                     tempCtx.fillStyle = obj.color;
                     // Split text into lines if it's multiline
                     const lines = wrapText(tempCtx, obj.text, textWidth - 10); // 10px padding
                     const lineHeight = obj.size * saveScale * 1.2; // 1.2 is a common line height multiplier
                     for (let i = 0; i < lines.length; i++) {
-                        tempCtx.fillText(lines[i], textX + 5, textY + 5 + i * lineHeight); // Add some padding
+                        tempCtx.fillText(lines[i], -textWidth / 2 + 5, -textHeight / 2 + 5 + i * lineHeight); // Add some padding
                     }
                 }
                 tempCtx.restore(); // Ripristina lo stato del contesto
@@ -2392,14 +2375,14 @@
                 const emoji = emojiMap[objectType]; // Solo per oggetti con emoji predefiniti
                 const id = `object-${Date.now()}`; // ID univoco per l'oggetto
 
-                // *** MODIFICA: Riduzione delle dimensioni di default per una migliore visualizzazione mobile ***
-                const defaultObjectSize = 25; // Dimensione di default ridotta per i nuovi oggetti (prima era 30)
-                const defaultTextSize = 12;   // Dimensione di default ridotta per il testo (prima era 14)
+                // Riduzione delle dimensioni di default per una migliore visualizzazione mobile
+                const defaultObjectSize = 25; // Dimensione di default ridotta per i nuovi oggetti
+                const defaultTextSize = 12;   // Dimensione di default ridotta per il testo
 
                 let objectObj = {
                     id: id,
-                    x: 0, // Saranno calcolati per centrare l'oggetto
-                    y: 0, // Saranno calcolati per centrare l'oggetto
+                    x: BASE_FIELD_WIDTH / 2, // Posiziona al centro del campo
+                    y: BASE_FIELD_HEIGHT / 2, // Posiziona al centro del campo
                     type: objectType,
                     emoji: emoji,
                     size: defaultObjectSize,
@@ -2407,45 +2390,19 @@
                     color: 'gray' // Colore di default per gli attrezzi generici
                 };
 
-                // Calcola le dimensioni effettive dell'oggetto per il posizionamento
-                let actualWidth, actualHeight;
-
                 if (objectType === 'player' || objectType === 'goalkeeper') {
                     objectObj.number = objectType === 'player' ? playerCounter++ : 'P'; // 'P' per portiere
                     objectObj.jerseyColor = 'blue'; // Default per i nuovi giocatori
                     objectObj.textColor = 'white'; // Default per i nuovi giocatori
-                    actualWidth = objectObj.size;
-                    actualHeight = objectObj.size;
                 } else if (objectType === 'cone') {
                     objectObj.color = 'red'; // Cono rosso di default
-                    actualWidth = objectObj.size;
-                    actualHeight = objectObj.size;
-                } else if (objectType === 'ladder') {
-                    actualWidth = objectObj.size;
-                    actualHeight = objectObj.size * (100/60); // Mantieni proporzioni 60x100
-                } else if (objectType === 'pole') {
-                    actualWidth = 5;
-                    actualHeight = 50;
-                } else if (objectType === 'obstacle') {
-                    actualWidth = objectObj.size * 1.5; // Make it wider
-                    actualHeight = objectObj.size * 0.75; // Make it shorter
                 } else if (objectType === 'text') {
                     objectObj.size = defaultTextSize; // Text size is font size
                     objectObj.text = 'Scrivi qui...'; // Default text content
                     objectObj.color = 'black'; // Default text color
                     objectObj.currentWidth = 100; // Default width in unscaled canvas units
                     objectObj.currentHeight = 50; // Default height in unscaled canvas units
-                    actualWidth = objectObj.currentWidth;
-                    actualHeight = objectObj.currentHeight;
-                } else { // Per palla, porta (emoji)
-                    actualWidth = objectObj.size; // Placeholder, will be auto
-                    actualHeight = objectObj.size; // Placeholder, will be auto
                 }
-
-                // *** MODIFICA: Posiziona l'oggetto al centro del campo in base alle sue dimensioni effettive ***
-                objectObj.x = BASE_FIELD_WIDTH / 2 - actualWidth / 2;
-                objectObj.y = BASE_FIELD_HEIGHT / 2 - actualHeight / 2;
-
 
                 const objectElement = document.createElement('div');
                 objectElement.id = id;
@@ -2502,7 +2459,7 @@
 
                 objectElement.style.left = `${objectObj.x * currentZoomLevel}px`;
                 objectElement.style.top = `${objectObj.y * currentZoomLevel}px`;
-                objectElement.style.transform = `rotate(${objectObj.rotation}deg)`; // Applica rotazione iniziale
+                objectElement.style.setProperty('--rotation', `${objectObj.rotation}deg`); // Applica rotazione iniziale
 
                 // Aggiungi l'elemento al contenitore del canvas, non direttamente al canvas
                 canvas.parentElement.appendChild(objectElement); 
