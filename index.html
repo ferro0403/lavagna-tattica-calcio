@@ -556,6 +556,11 @@
 
         // Funzione per mostrare messaggi all'utente
         function showMessage(message, duration = 2000) {
+            // *** MODIFICA: Non mostrare più il messaggio se è un messaggio di selezione oggetto/disegno ***
+            if (message.startsWith("Oggetto selezionato:") || message.startsWith("Disegno selezionato:")) {
+                console.log("Suppressing selection message:", message);
+                return;
+            }
             console.log("Showing message:", message);
             messageBox.textContent = message;
             messageBox.classList.add('show');
@@ -1017,7 +1022,8 @@
                         dragOffsetY = y - item.y;
                     }
                     
-                    showMessage(`Disegno selezionato: ${item.type}`);
+                    // *** MODIFICA: Rimosso il messaggio di selezione disegno ***
+                    // showMessage(`Disegno selezionato: ${item.type}`);
                     // Aggiungi listener globali per il trascinamento del disegno
                     document.addEventListener('mousemove', dragDrawingOnCanvas);
                     document.addEventListener('mouseup', stopDrawingDragOnCanvas);
@@ -1407,7 +1413,8 @@
                         }
                     }
 
-                    showMessage(`Oggetto selezionato: ${selectedObject.type === 'player' || selectedObject.type === 'goalkeeper' ? selectedObject.number : selectedObject.type}`);
+                    // *** MODIFICA: Rimosso il messaggio di selezione oggetto ***
+                    // showMessage(`Oggetto selezionato: ${selectedObject.type === 'player' || selectedObject.type === 'goalkeeper' ? selectedObject.number : selectedObject.type}`);
                     
                     // Inizia il trascinamento
                     draggingObject = selectedObject;
@@ -2391,22 +2398,13 @@
                 const id = `object-${Date.now()}`; // ID univoco per l'oggetto
 
                 // *** MODIFICA: Riduzione delle dimensioni di default per una migliore visualizzazione mobile ***
-                const defaultObjectSize = 35; // Dimensione di default ridotta per i nuovi oggetti (prima era 50)
-                const defaultTextSize = 16;   // Dimensione di default ridotta per il testo (prima era 20)
-
-                // Posiziona l'oggetto al centro del canvas inizialmente (coordinate non scalate)
-                const initialX = BASE_FIELD_WIDTH / 2 - defaultObjectSize / 2;
-                const initialY = BASE_FIELD_HEIGHT / 2 - defaultObjectSize / 2;
-
-                const objectElement = document.createElement('div');
-                objectElement.id = id;
-                objectElement.classList.add('player-icon');
-                objectElement.dataset.objectType = objectType; // Usa dataset.objectType per coerenza
+                const defaultObjectSize = 30; // Dimensione di default ridotta per i nuovi oggetti (prima era 35)
+                const defaultTextSize = 14;   // Dimensione di default ridotta per il testo (prima era 16)
 
                 let objectObj = {
                     id: id,
-                    x: initialX,
-                    y: initialY,
+                    x: 0, // Saranno calcolati per centrare l'oggetto
+                    y: 0, // Saranno calcolati per centrare l'oggetto
                     type: objectType,
                     emoji: emoji,
                     size: defaultObjectSize,
@@ -2414,11 +2412,52 @@
                     color: 'gray' // Colore di default per gli attrezzi generici
                 };
 
+                // Calcola le dimensioni effettive dell'oggetto per il posizionamento
+                let actualWidth, actualHeight;
+
                 if (objectType === 'player' || objectType === 'goalkeeper') {
                     objectObj.number = objectType === 'player' ? playerCounter++ : 'P'; // 'P' per portiere
                     objectObj.jerseyColor = 'blue'; // Default per i nuovi giocatori
                     objectObj.textColor = 'white'; // Default per i nuovi giocatori
+                    actualWidth = objectObj.size;
+                    actualHeight = objectObj.size;
+                } else if (objectType === 'cone') {
+                    objectObj.color = 'red'; // Cono rosso di default
+                    actualWidth = objectObj.size;
+                    actualHeight = objectObj.size;
+                } else if (objectType === 'ladder') {
+                    actualWidth = objectObj.size;
+                    actualHeight = objectObj.size * (100/60); // Mantieni proporzioni 60x100
+                } else if (objectType === 'pole') {
+                    actualWidth = 5;
+                    actualHeight = 50;
+                } else if (objectType === 'obstacle') {
+                    actualWidth = objectObj.size * 1.5; // Make it wider
+                    actualHeight = objectObj.size * 0.75; // Make it shorter
+                } else if (objectType === 'text') {
+                    objectObj.size = defaultTextSize; // Text size is font size
+                    objectObj.text = 'Scrivi qui...'; // Default text content
+                    objectObj.color = 'black'; // Default text color
+                    objectObj.currentWidth = 100; // Default width in unscaled canvas units
+                    objectObj.currentHeight = 50; // Default height in unscaled canvas units
+                    actualWidth = objectObj.currentWidth;
+                    actualHeight = objectObj.currentHeight;
+                } else { // Per palla, porta (emoji)
+                    actualWidth = objectObj.size; // Placeholder, will be auto
+                    actualHeight = objectObj.size; // Placeholder, will be auto
+                }
 
+                // *** MODIFICA: Posiziona l'oggetto al centro del campo in base alle sue dimensioni effettive ***
+                objectObj.x = BASE_FIELD_WIDTH / 2 - actualWidth / 2;
+                objectObj.y = BASE_FIELD_HEIGHT / 2 - actualHeight / 2;
+
+
+                const objectElement = document.createElement('div');
+                objectElement.id = id;
+                objectElement.classList.add('player-icon');
+                objectElement.dataset.objectType = objectType; // Usa dataset.objectType per coerenza
+
+                if (objectType === 'player' || objectType === 'goalkeeper') {
                     objectElement.style.backgroundColor = objectObj.jerseyColor;
                     objectElement.style.color = objectObj.textColor;
                     objectElement.innerHTML = `<span class="player-number">${objectObj.number}</span>`;
@@ -2428,7 +2467,6 @@
                     objectElement.style.fontWeight = 'bold';
                     objectElement.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
                 } else if (objectType === 'cone') {
-                    objectObj.color = 'red'; // Cono rosso di default
                     objectElement.innerHTML = SVG_CONE;
                     objectElement.style.color = objectObj.color;
                     objectElement.style.width = `${objectObj.size * currentZoomLevel}px`;
@@ -2449,12 +2487,6 @@
                     objectElement.style.width = `${objectObj.size * currentZoomLevel * 1.5}px`; // Make it wider
                     objectElement.style.height = `${objectObj.size * currentZoomLevel * 0.75}px`; // Make it shorter
                 } else if (objectType === 'text') {
-                    objectObj.size = defaultTextSize; // Text size is font size
-                    objectObj.text = 'Scrivi qui...'; // Default text content
-                    objectObj.color = 'black'; // Default text color
-                    objectObj.currentWidth = 100; // Default width in unscaled canvas units
-                    objectObj.currentHeight = 50; // Default height in unscaled canvas units
-
                     objectElement.textContent = objectObj.text;
                     objectElement.style.fontSize = `${objectObj.size * currentZoomLevel}px`;
                     objectElement.style.color = objectObj.color;
@@ -2473,8 +2505,8 @@
                     objectElement.style.borderRadius = '0';
                 }
 
-                objectElement.style.left = `${initialX * currentZoomLevel}px`;
-                objectElement.style.top = `${initialY * currentZoomLevel}px`;
+                objectElement.style.left = `${objectObj.x * currentZoomLevel}px`;
+                objectElement.style.top = `${objectObj.y * currentZoomLevel}px`;
                 objectElement.style.transform = `rotate(${objectObj.rotation}deg)`; // Applica rotazione iniziale
 
                 // Aggiungi l'elemento al contenitore del canvas, non direttamente al canvas
