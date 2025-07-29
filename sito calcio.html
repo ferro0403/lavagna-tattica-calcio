@@ -1,0 +1,2533 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lavagna Tattica di Calcio</title>
+    <!-- Meta tag per PWA -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#3b82f6"> <!-- Colore della barra del browser su Android -->
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png"> <!-- Icona per iOS -->
+
+    <!-- Caricamento di Tailwind CSS per uno styling rapido e responsivo -->
+    <!-- NOTA: Il seguente script è per sviluppo/demo. Per produzione, installa Tailwind come plugin PostCSS. -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8; /* Sfondo leggero */
+            display: flex;
+            justify-content: center;
+            align-items: center; /* Centra verticalmente il container */
+            min-height: 100vh;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            background-color: #ffffff;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            padding: 25px;
+            max-width: 1400px; /* Aumentato per rendere il campo più largo */
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        @media (min-width: 768px) {
+            .container {
+                flex-direction: row;
+            }
+            .controls-panel {
+                width: 250px; /* Larghezza fissa per il pannello controlli */
+                flex-shrink: 0;
+            }
+            .canvas-area {
+                flex-grow: 1; /* Permette al canvas di occupare lo spazio rimanente */
+            }
+        }
+        canvas {
+            border: 2px solid #cbd5e0; /* Bordo sottile per la lavagna */
+            background-color: #e2e8f0; /* Sfondo del campo */
+            cursor: crosshair; /* Cursore a croce per il disegno */
+            touch-action: none; /* Impedisce lo scrolling del browser su touch */
+            border-radius: 10px;
+            width: 100%; /* La larghezza del canvas si adatta al contenitore */
+            height: auto; /* L'altezza si adatta per mantenere l'aspetto */
+        }
+        .tool-button, .action-button, .player-button {
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: all 0.2s ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            white-space: nowrap; /* Evita che il testo vada a capo */
+        }
+        .tool-button.active {
+            background-color: #3b82f6; /* Blu più scuro per il tool attivo */
+            color: white;
+            box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+        }
+        .tool-button:hover:not(.active), .action-button:hover, .player-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+        .player-icon {
+            cursor: grab;
+            user-select: none;
+            transition: transform 0.1s ease-out;
+            position: absolute; /* Permette il posizionamento libero sul canvas */
+            line-height: 1; /* Rimuove spazio extra sopra/sotto l'emoji */
+            transform-origin: center center; /* Punto di origine per il ridimensionamento e rotazione */
+            border: 2px solid transparent; /* Bordo invisibile per selezione */
+            box-sizing: border-box; /* Include padding/border nel calcolo della dimensione */
+            display: flex; /* Per centrare contenuto SVG/emoji */
+            justify-content: center;
+            align-items: center;
+        }
+        .player-icon.dragging {
+            cursor: grabbing;
+            opacity: 0.7;
+        }
+        .player-icon.selected {
+            border-color: #3b82f6; /* Bordo blu per l'oggetto selezionato */
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
+        }
+        /* Stili specifici per i giocatori (maglietta/portiere) */
+        .player-icon[data-object-type="player"],
+        .player-icon[data-object-type="goalkeeper"] {
+            border-radius: 50%; /* Forma circolare */
+            font-weight: bold;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            text-shadow: none; /* Rimuove l'ombra del testo per i numeri */
+        }
+        .player-icon .player-number {
+            font-size: 0.6em; /* Dimensione del numero relativa alla dimensione del giocatore */
+        }
+        /* Stili per gli altri oggetti (palla, porta, ostacolo) */
+        .player-icon[data-object-type="ball"],
+        .player-icon[data-object-type="gate"] {
+            background-color: transparent !important; /* Nessuno sfondo per questi */
+            color: inherit !important; /* Mantieni il colore predefinito dell'emoji */
+            border: none !important;
+            box-shadow: none !important;
+            width: auto; /* Larghezza automatica per adattarsi all'emoji */
+            height: auto;
+            border-radius: 0;
+            font-size: 2.5rem; /* Dimensione originale dell'emoji */
+        }
+
+        /* Stili per Cono, Scaletta, Paletto, Ostacolo (SVG) */
+        .player-icon[data-object-type="cone"],
+        .player-icon[data-object-type="ladder"],
+        .player-icon[data-object-type="pole"],
+        .player-icon[data-object-type="obstacle"] {
+            background-color: transparent; /* Sfondo trasparente per contenere SVG */
+            color: currentColor; /* Il colore del testo CSS imposta il fill dell'SVG */
+            border-radius: 0; /* Nessun bordo radius di default */
+            box-shadow: none; /* Nessuna ombra di default */
+            padding: 0;
+        }
+        .player-icon[data-object-type="pole"] {
+            width: 5px;
+            height: 50px;
+            background-color: currentColor;
+            border-radius: 2px;
+        }
+        .player-icon svg {
+            width: 100%;
+            height: 100%;
+            display: block; /* Rimuove spazio extra sotto l'SVG */
+        }
+
+        /* Stili per l'oggetto Testo */
+        .player-icon[data-object-type="text"] {
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 1.2rem; /* Dimensione di base per il testo */
+            color: black; /* Colore di default per il testo */
+            min-width: 50px;
+            min-height: 20px;
+            white-space: pre-wrap; /* Permette il wrap del testo e i ritorni a capo */
+            word-break: break-word; /* Rompe le parole lunghe */
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            resize: both; /* Permette all'utente di ridimensionare */
+            overflow: hidden; /* Nasconde il contenuto in eccesso */
+        }
+        .player-icon[data-object-type="text"]:focus {
+            outline: 2px solid #3b82f6;
+        }
+
+        .color-picker {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 2px solid #cbd5e0;
+            cursor: pointer;
+            transition: transform 0.1s ease-in-out;
+        }
+        .color-picker:hover {
+            transform: scale(1.1);
+        }
+        .color-picker.active {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
+        }
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%; /* Larghezza completa per lo slider */
+            height: 8px;
+            background: #cbd5e0;
+            border-radius: 5px;
+            outline: none;
+            opacity: 0.7;
+            transition: opacity .2s;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .field-select {
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid #cbd5e0;
+            background-color: #f8fafc;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .field-select:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+        .message-box {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #333;
+            color: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            z-index: 1000;
+            font-size: 1.1rem;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease-in-out, visibility 0.3s ease-in-out;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        .message-box.show {
+            opacity: 1;
+            visibility: visible;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center p-5 bg-gray-100 min-h-screen">
+    <div class="container flex flex-col gap-6">
+        <!-- Pannello di controllo laterale -->
+        <div class="controls-panel w-full p-4 bg-white rounded-lg shadow-md">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">Strumenti Lavagna</h2>
+
+            <!-- Selezione Campo -->
+            <div class="flex flex-col gap-2 mb-4">
+                <label for="field-type" class="text-gray-700 font-semibold">Tipo di Campo:</label>
+                <select id="field-type" class="field-select">
+                    <option value="full-pitch">Campo Intero</option>
+                    <option value="half-pitch">Metà Campo</option>
+                    <option value="penalty-area">Area di Rigore</option>
+                </select>
+            </div>
+
+            <!-- Zoom Campo -->
+            <div class="slider-container flex-col items-start gap-2 mb-4">
+                <label for="zoom-level" class="text-gray-700 font-semibold">Zoom Campo:</label>
+                <input type="range" id="zoom-level" min="0.5" max="2" step="0.1" value="1">
+                <span id="zoom-level-value" class="text-gray-600">100%</span>
+            </div>
+
+            <!-- Strumenti di Disegno -->
+            <div class="flex flex-wrap gap-3 mb-4">
+                <button id="tool-select" class="tool-button bg-gray-200 text-gray-700 hover:bg-gray-300" title="Mano (Sposta/Seleziona Oggetti)">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                        <path fill-rule="evenodd" d="M10.5 3.75a6.75 6.75 0 1 0 0 13.5 6.75 6.75 0 0 0 0-13.5ZM2.25 10.5a8.25 8.25 0 1 1 14.59 4.796l4.392 4.392a.75.75 0 0 1-1.06 1.06l-4.39-4.39A8.25 8.25 0 0 1 2.25 10.5Z" clip-rule="evenodd" />
+                    </svg>
+                    Mano
+                </button>
+                <button id="tool-pass" class="tool-button bg-blue-500 text-white hover:bg-blue-600 active" title="Passaggio (Linea continua)">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                        <path fill-rule="evenodd" d="M12.97 3.97a.75.75 0 0 1 1.06 0l7.5 7.5a.75.75 0 0 1 0 1.06l-7.5 7.5a.75.75 0 1 1-1.06-1.06l6.22-6.22H3a.75.75 0 0 1 0-1.5h16.19l-6.22-6.22a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+                    </svg>
+                    Passaggio
+                </button>
+                <button id="tool-run" class="tool-button bg-gray-200 text-gray-700 hover:bg-gray-300" title="Corsa senza palla (Linea tratteggiata)">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                        <path fill-rule="evenodd" d="M15.75 2.25A.75.75 0 0 0 15 3v4.5a.75.75 0 0 0 1.5 0V3a.75.75 0 0 0-.75-.75ZM12.75 3a.75.75 0 0 0-.75.75V12a.75.75 0 0 0 1.5 0V3.75a.75.75 0 0 0-.75-.75ZM11.25 3.75a.75.75 0 0 0-.75.75V12a.75.75 0 0 0 1.5 0V4.5a.75.75 0 0 0-.75-.75ZM9.75 4.5a.75.75 0 0 0-.75.75V12a.75.75 0 0 0 1.5 0V5.25a.75.75 0 0 0-.75-.75ZM8.25 5.25a.75.75 0 0 0-.75.75V12a.75.75 0 0 0 1.5 0V6a.75.75 0 0 0-.75-.75ZM6.75 6a.75.75 0 0 0-.75.75v12a.75.75 0 0 0 1.5 0V6.75a.75.75 0 0 0-.75-.75ZM5.25 6.75a.75.75 0 0 0-.75.75v12a.75.75 0 0 0 1.5 0V7.5a.75.75 0 0 0-.75-.75ZM3.75 7.5a.75.75 0 0 0-.75.75v12a.75.75 0 0 0 1.5 0V8.25a.75.75 0 0 0-.75-.75ZM2.25 8.25a.75.75 0 0 0-.75.75v12a.75.75 0 0 0 1.5 0V9a.75.75 0 0 0-.75-.75Z" clip-rule="evenodd" />
+                        <path fill-rule="evenodd" d="M19.5 2.25a.75.75 0 0 0-.75.75v12a.75.75 0 0 0 1.5 0V3a.75.75 0 0 0-.75-.75ZM18 3a.75.75 0 0 0-.75.75v12a.75.75 0 0 0 1.5 0V3.75a.75.75 0 0 0-.75-.75ZM16.5 3.75a.75.75 0 0 0-.75.75v12a.75.75 0 0 0 1.5 0V4.5a.75.75 0 0 0-.75-.75Z" clip-rule="evenodd" />
+                    </svg>
+                    Corsa senza palla
+                </button>
+                <button id="tool-dribble" class="tool-button bg-gray-200 text-gray-700 hover:bg-gray-300" title="Conduzione di palla (Linea ondulata)">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                        <path fill-rule="evenodd" d="M10.5 6a.75.75 0 0 0-.75.75v6.586L7.22 10.53a.75.75 0 0 0-1.06 1.06l4.25 4.25a.75.75 0 0 0 1.06 0l4.25-4.25a.75.75 0 0 0-1.06-1.06l-2.53 2.53V6.75a.75.75 0 0 0-.75-.75Z" clip-rule="evenodd" />
+                        <path fill-rule="evenodd" d="M1.5 12a.75.75 0 0 0 .75.75H3a.75.75 0 0 0 0-1.5H2.25a.75.75 0 0 0-.75.75ZM21.75 12a.75.75 0 0 0-.75.75H21a.75.75 0 0 0 0-1.5h.75a.75.75 0 0 0 .75.75ZM4.5 5.75a.75.75 0 0 0-.75.75v.75a.75.75 0 0 0 1.5 0V6.5a.75.75 0 0 0-.75-.75ZM4.5 17.5a.75.75 0 0 0-.75.75v.75a.75.75 0 0 0 1.5 0V18.25a.75.75 0 0 0-.75-.75ZM12 2.25a.75.75 0 0 0-.75.75v.75a.75.75 0 0 0 1.5 0V3a.75.75 0 0 0-.75-.75ZM12 20.5a.75.75 0 0 0-.75.75v.75a.75.75 0 0 0 1.5 0v-.75a.75.75 0 0 0-.75-.75ZM19.5 5.75a.75.75 0 0 0-.75.75v.75a.75.75 0 0 0 1.5 0V6.5a.75.75 0 0 0-.75-.75ZM19.5 17.5a.75.75 0 0 0-.75.75v.75a.75.75 0 0 0 1.5 0V18.25a.75.75 0 0 0-.75-.75Z" clip-rule="evenodd" />
+                    </svg>
+                    Conduzione
+                </button>
+                <button id="tool-shot" class="tool-button bg-gray-200 text-gray-700 hover:bg-gray-300" title="Tiro (Doppia linea continua)">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                        <path fill-rule="evenodd" d="M19.5 21a.75.75 0 0 0 .75-.75V5.625a.75.75 0 0 0-1.5 0v14.625a.75.75 0 0 0 .75.75ZM15.75 21a.75.75 0 0 0 .75-.75V5.625a.75.75 0 0 0-1.5 0v14.625a.75.75 0 0 0 .75.75ZM12 21a.75.75 0 0 0 .75-.75V3.75a.75.75 0 0 0-1.5 0v16.5a.75.75 0 0 0 .75.75ZM8.25 21a.75.75 0 0 0 .75-.75V3.75a.75.75 0 0 0-1.5 0v16.5a.75.75 0 0 0 .75.75ZM4.5 21a.75.75 0 0 0 .75-.75V5.625a.75.75 0 0 0-1.5 0v14.625a.75.75 0 0 0 .75.75Z" clip-rule="evenodd" />
+                    </svg>
+                    Tiro
+                </button>
+                <button id="tool-circle" class="tool-button bg-gray-200 text-gray-700 hover:bg-gray-300" title="Cerchio">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                        <path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM1.25 12C1.25 6.063 6.063 1.25 12 1.25S22.75 6.063 22.75 12 17.937 22.75 12 22.75 1.25 17.937 1.25 12Z" clip-rule="evenodd" />
+                    </svg>
+                    Cerchio
+                </button>
+                <button id="tool-rectangle" class="tool-button bg-gray-200 text-gray-700 hover:bg-gray-300" title="Rettangolo">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                        <path fill-rule="evenodd" d="M3.75 3.75c0-1.036.84-1.875 1.875-1.875h12.75c1.035 0 1.875.84 1.875 1.875v12.75c0 1.035-.84 1.875-1.875 1.875H5.625a1.875 1.875 0 0 1-1.875-1.875V3.75ZM16.5 6A1.5 1.5 0 0 0 15 4.5H9A1.5 1.5 0 0 0 7.5 6v1.5A1.5 1.5 0 0 0 9 9h6a1.5 1.5 0 0 0 1.5-1.5V6Z" clip-rule="evenodd" />
+                    </svg>
+                    Rettangolo
+                </button>
+                <button id="tool-erase" class="tool-button bg-red-400 text-white hover:bg-red-500" title="Gomma">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                        <path d="M17.25 7.5A.75.75 0 0 1 18 8.25v10.5a.75.75 0 0 1-1.5 0V8.25a.75.75 0 0 1 .75-.75ZM15.75 8.25A.75.75 0 0 1 16.5 9v8.25a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75ZM14.25 9A.75.75 0 0 1 15 9.75v6.75a.75.75 0 0 1-1.5 0V9.75a.75.75 0 0 1 .75-.75ZM12.75 9.75A.75.75 0 0 1 13.5 10.5v5.25a.75.75 0 0 1-1.5 0V10.5a.75.75 0 0 1 .75-.75ZM11.25 10.5A.75.75 0 0 1 12 11.25v3.75a.75.75 0 0 1-1.5 0V11.25a.75.75 0 0 1 .75-.75ZM9.75 11.25A.75.75 0 0 1 10.5 12v2.25a.75.75 0 0 1-1.5 0V12a.75.75 0 0 1 .75-.75ZM8.25 12A.75.75 0 0 1 9 12.75v.75a.75.75 0 0 1-1.5 0v-.75a.75.75 0 0 1 .75-.75Z" />
+                        <path fill-rule="evenodd" d="M6.47 2.47a.75.75 0 0 1 1.06 0l11.25 11.25a.75.75 0 0 1 0 1.06l-3.75 3.75a.75.75 0 0 1-1.06 0L2.47 3.53a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+                    </svg>
+                    Gomma
+                </button>
+            </div>
+
+            <!-- Selezione Colore e Spessore Linea Disegno -->
+            <div class="flex flex-col gap-2 mb-4">
+                <label class="text-gray-700 font-semibold">Colore Linea Disegno:</label>
+                <div class="flex gap-2">
+                    <div class="color-picker bg-black active" data-color="black"></div>
+                    <div class="color-picker bg-red-500" data-color="red"></div>
+                    <div class="color-picker bg-blue-500" data-color="blue"></div>
+                    <div class="color-picker bg-green-500" data-color="green"></div>
+                    <div class="color-picker bg-yellow-500" data-color="yellow"></div>
+                </div>
+            </div>
+
+            <div class="slider-container flex-col items-start gap-2 mb-4">
+                <label for="line-width" class="text-gray-700 font-semibold">Spessore Linea Disegno:</label>
+                <input type="range" id="line-width" min="1" max="10" value="3">
+                <span id="line-width-value" class="text-gray-600">3</span>
+            </div>
+
+            <!-- Controlli Oggetto Selezionato (visibili solo quando un oggetto è selezionato) -->
+            <div id="object-controls" class="flex flex-col gap-2 mb-4 hidden">
+                <h3 class="text-lg font-bold text-gray-800 mt-2">Oggetto Selezionato</h3>
+
+                <div class="slider-container flex-col items-start gap-2">
+                    <label for="object-size" class="text-gray-700 font-semibold">Dimensione Oggetto:</label>
+                    <input type="range" id="object-size" min="30" max="80" value="50">
+                    <span id="object-size-value" class="text-gray-600">50px</span>
+                </div>
+
+                <div class="slider-container flex-col items-start gap-2">
+                    <label for="object-rotation" class="text-gray-700 font-semibold">Rotazione Oggetto:</label>
+                    <input type="range" id="object-rotation" min="0" max="360" value="0">
+                    <span id="object-rotation-value" class="text-gray-600">0°</span>
+                </div>
+
+                <!-- Controlli Colore Maglia/Numero (visibili solo per Giocatori/Portieri) -->
+                <div id="player-color-controls" class="flex flex-col gap-2 hidden">
+                    <div class="flex flex-col gap-2">
+                        <label class="text-gray-700 font-semibold">Colore Maglia:</label>
+                        <div class="flex gap-2" id="jersey-color-pickers">
+                            <div class="color-picker bg-blue-500 active" data-color="blue"></div>
+                            <div class="color-picker bg-red-500" data-color="red"></div>
+                            <div class="color-picker bg-yellow-500" data-color="yellow"></div>
+                            <div class="color-picker bg-green-500" data-color="green"></div>
+                            <div class="color-picker bg-white" data-color="white"></div>
+                            <div class="color-picker bg-black" data-color="black"></div>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col gap-2">
+                        <label class="text-gray-700 font-semibold">Colore Numero:</label>
+                        <div class="flex gap-2" id="number-color-pickers">
+                            <div class="color-picker bg-white active" data-color="white"></div>
+                            <div class="color-picker bg-black" data-color="black"></div>
+                            <div class="color-picker bg-red-500" data-color="red"></div>
+                            <div class="color-picker bg-blue-500" data-color="blue"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controlli Colore Oggetto Generico (visibili per Coni, Scalette, Paletti, Ostacoli, Testo) -->
+                <div id="general-object-color-controls" class="flex flex-col gap-2 hidden">
+                    <label class="text-gray-700 font-semibold">Colore Oggetto/Testo:</label>
+                    <div class="flex gap-2" id="object-color-pickers">
+                        <div class="color-picker bg-gray-700 active" data-color="gray"></div>
+                        <div class="color-picker bg-orange-500" data-color="orange"></div>
+                        <div class="color-picker bg-white" data-color="white"></div>
+                        <div class="color-picker bg-black" data-color="black"></div>
+                        <div class="color-picker bg-red-500" data-color="red"></div>
+                        <div class="color-picker bg-blue-500" data-color="blue"></div>
+                        <div class="color-picker bg-green-500" data-color="green"></div>
+                        <div class="color-picker bg-yellow-500" data-color="yellow"></div>
+                    </div>
+                </div>
+                <button id="delete-object-button" class="action-button bg-red-500 text-white hover:bg-red-600 mt-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                        <path fill-rule="evenodd" d="M16.5 4.478v.227a4.924 4.924 0 0 1 2.573 2.573V17.25a4.924 4.924 0 0 1-2.573 2.573H7.75a4.924 4.924 0 0 1-2.573-2.573V7.275c0-1.76.793-3.354 2.05-4.478A2.25 2.25 0 0 1 12 2.25a2.25 2.25 0 0 1 4.5 0ZM12 4.5a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-1.5 0V5.25A.75.75 0 0 1 12 4.5ZM7.5 10.5a.75.75 0 0 0 0 1.5h.008a.75.75 0 0 0 0-1.5H7.5ZM12 10.5a.75.75 0 0 0 0 1.5h.008a.75.75 0 0 0 0-1.5H12ZM16.5 10.5a.75.75 0 0 0 0 1.5h.008a.75.75 0 0 0 0-1.5H16.5Z" clip-rule="evenodd" />
+                    </svg>
+                    Elimina Oggetto
+                </button>
+            </div>
+
+
+            <!-- Giocatori -->
+            <div class="flex flex-col gap-2 mb-4">
+                <label class="text-gray-700 font-semibold">Aggiungi Giocatori/Oggetti:</label>
+                <div id="player-buttons" class="grid grid-cols-3 gap-2">
+                    <button class="player-button bg-gray-200 text-gray-700 hover:bg-gray-300" data-object-type="player">Giocatore</button>
+                    <button class="player-button bg-gray-200 text-gray-700 hover:bg-gray-300" data-object-type="goalkeeper">Portiere</button>
+                    <button class="player-button bg-gray-200 text-gray-700 hover:bg-gray-300" data-object-type="cone">Cono</button>
+                    <button class="player-button bg-gray-200 text-gray-700 hover:bg-gray-300" data-object-type="ball">Palla ⚽</button>
+                    <button class="player-button bg-gray-200 text-gray-700 hover:bg-gray-300" data-object-type="gate">Porta 🥅</button>
+                    <button class="player-button bg-gray-200 text-gray-700 hover:bg-gray-300" data-object-type="ladder">Scaletta</button>
+                    <button class="player-button bg-gray-200 text-gray-700 hover:bg-gray-300" data-object-type="pole">Paletto</button>
+                    <button class="player-button bg-gray-200 text-gray-700 hover:bg-gray-300" data-object-type="obstacle">Ostacolo</button>
+                    <button class="player-button bg-gray-200 text-gray-700 hover:bg-gray-300" data-object-type="text">Testo</button>
+                </div>
+            </div>
+
+            <!-- Azioni -->
+            <div class="flex flex-col gap-3 mt-auto">
+                <button id="clear-button" class="action-button bg-red-500 text-white hover:bg-red-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                        <path fill-rule="evenodd" d="M16.5 4.478v.227a4.924 4.924 0 0 1 2.573 2.573V17.25a4.924 4.924 0 0 1-2.573 2.573H7.75a4.924 4.924 0 0 1-2.573-2.573V7.275c0-1.76.793-3.354 2.05-4.478A2.25 2.25 0 0 1 12 2.25a2.25 2.25 0 0 1 4.5 0ZM12 4.5a.75.75 0 0 1 .75.75v2.25a.75.75 0 0 1-1.5 0V5.25A.75.75 0 0 1 12 4.5ZM7.5 10.5a.75.75 0 0 0 0 1.5h.008a.75.75 0 0 0 0-1.5H7.5ZM12 10.5a.75.75 0 0 0 0 1.5h.008a.75.75 0 0 0 0-1.5H12ZM16.5 10.5a.75.75 0 0 0 0 1.5h.008a.75.75 0 0 0 0-1.5H16.5Z" clip-rule="evenodd" />
+                    </svg>
+                    Pulisci Lavagna
+                </button>
+                <button id="save-button" class="action-button bg-green-500 text-white hover:bg-green-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                        <path fill-rule="evenodd" d="M12 2.25a.75.75 0 0 1 .75.75v11.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-4.5 4.5a.75.75 0 0 1-1.06 0l-4.5-4.5a.75.75 0 1 1 1.06-1.06l3.22 3.22V3a.75.75 0 0 1 .75-.75ZM12.75 18a.75.75 0 0 0-1.5 0v.75H6.75a.75.75 0 0 0 0 1.5h10.5a.75.75 0 0 0 0-1.5H12.75V18Z" clip-rule="evenodd" />
+                    </svg>
+                    Salva Immagine
+                </button>
+                <button id="record-button" class="action-button bg-purple-500 text-white hover:bg-purple-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                        <path fill-rule="evenodd" d="M1.5 6a2.25 2.25 0 0 1 2.25-2.25h16.5A2.25 2.25 0 0 1 22.5 6v12a2.25 2.25 0 0 1-2.25 2.25H3.75A2.25 2.25 0 0 1 1.5 18V6ZM3 16.06V18c0 .414.336.75.75.75h16.5A.75.75 0 0 0 21 18v-1.94l-2.69-2.69a1.5 1.5 0 0 0-2.12 0l-.88.879.97.97a.75.75 0 1 1-1.06 1.06l-5.695-5.695a1.5 1.5 0 0 0-2.12 0L3 16.061Zm10.125-7.81a1.125 1.125 0 1 1 2.25 0 1.125 1.125 0 0 1-2.25 0Z" clip-rule="evenodd" />
+                    </svg>
+                    Registra Animazione
+                </button>
+                <button id="play-button" class="action-button bg-teal-500 text-white hover:bg-teal-600" disabled>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
+                        <path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12ZM10.5 8.25a.75.75 0 0 0-1.5 0v7.5a.75.75 0 0 0 1.5 0v-7.5ZM14.25 8.25a.75.75 0 0 0-1.5 0v7.5a.75.75 0 0 0 1.5 0v-7.5Z" clip-rule="evenodd" />
+                    </svg>
+                    Riproduci Animazione
+                </button>
+            </div>
+        </div>
+
+        <!-- Area della Lavagna Tattica -->
+        <div class="canvas-area relative flex items-center justify-center">
+            <canvas id="tacticsCanvas"></canvas>
+            <div id="messageBox" class="message-box"></div>
+        </div>
+
+        <!-- Sezione Commenti Esercizio -->
+        <div class="w-full p-4 bg-white rounded-lg shadow-md mt-6">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">Commenti Esercizio</h2>
+            <textarea id="exercise-comments" class="w-full h-32 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Scrivi qui i tuoi commenti sull'esercizio..."></textarea>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('tacticsCanvas');
+        const ctx = canvas.getContext('2d');
+        const fieldTypeSelect = document.getElementById('field-type');
+        const toolButtons = document.querySelectorAll('.tool-button');
+        const colorPickers = document.querySelectorAll('.color-picker'); // Per colore linea disegno
+        const lineWidthInput = document.getElementById('line-width');
+        const lineWidthValueSpan = document.getElementById('line-width-value');
+        const clearButton = document.getElementById('clear-button');
+        const saveButton = document.getElementById('save-button');
+        const playerButtons = document.getElementById('player-buttons');
+        const recordButton = document.getElementById('record-button');
+        const playButton = document.getElementById('play-button');
+        const messageBox = document.getElementById('messageBox');
+        const zoomLevelInput = document.getElementById('zoom-level');
+        const zoomLevelValueSpan = document.getElementById('zoom-level-value');
+        const objectControls = document.getElementById('object-controls'); // Controlli oggetto selezionato
+        const objectSizeInput = document.getElementById('object-size');
+        const objectSizeValueSpan = document.getElementById('object-size-value');
+        const objectRotationInput = document.getElementById('object-rotation');
+        const objectRotationValueSpan = document.getElementById('object-rotation-value');
+        const playerColorControls = document.getElementById('player-color-controls');
+        const jerseyColorPickers = document.querySelectorAll('#jersey-color-pickers .color-picker');
+        const numberColorPickers = document.querySelectorAll('#number-color-pickers .color-picker');
+        const generalObjectColorPickers = document.querySelectorAll('#object-color-pickers .color-picker'); // Nuovi color picker per oggetti generici
+        const exerciseCommentsTextarea = document.getElementById('exercise-comments');
+        const deleteObjectButton = document.getElementById('delete-object-button');
+
+
+        // Costanti per le dimensioni base del campo (coordinate logiche non scalate)
+        const BASE_FIELD_WIDTH = 1000;
+        const BASE_FIELD_HEIGHT = 600;
+        const SAVE_RESOLUTION_MULTIPLIER = 2; // Moltiplicatore per la risoluzione dell'immagine salvata
+
+        let drawing = false;
+        let currentTool = 'pass'; // Strumento di disegno predefinito: Passaggio (linea continua)
+        let currentColor = 'black'; // Colore linea disegno predefinito
+        let currentLineWidth = 3; // Spessore linea predefinito
+        let lastX = 0;
+        let lastY = 0;
+        let drawingStartPoint = null; // Punto di inizio per il disegno di linee/forme
+
+        let objects = []; // Array per memorizzare tutti gli oggetti (giocatori, coni, ecc.)
+        let draggingObject = null;
+        let selectedObject = null; // Oggetto HTML attualmente selezionato per il ridimensionamento/rotazione/colore
+        let objectOffsetX = 0; // Offset del mouse rispetto all'angolo in alto a sinistra dell'oggetto (in coordinate del canvas non scalate)
+        let objectOffsetY = 0; // Offset del mouse rispetto all'angolo in alto a sinistra dell'oggetto (in coordinate del canvas non scalate)
+        
+        let selectedDrawing = null; // Disegno canvas attualmente selezionato
+        let draggingDrawing = null; // Disegno canvas attualmente trascinato
+        let dragOffsetX = 0; // Offset del mouse rispetto all'inizio del disegno (per trascinamento)
+        let dragOffsetY = 0; // Offset del mouse rispetto all'inizio del disegno (per trascinamento)
+
+        let playerCounter = 1; // Contatore per i numeri dei giocatori
+
+        let animationFrames = [];
+        let isRecording = false;
+        let animationInterval = null;
+        let currentZoomLevel = 1.0; // Livello di zoom attuale
+
+        // --- SVG Definitions for Objects ---
+        const SVG_CONE = `
+            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" fill="currentColor">
+                <polygon points="30,100 70,100 50,0" />
+                <rect x="20" y="90" width="60" height="10" />
+            </svg>
+        `;
+
+        const SVG_LADDER = `
+            <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" fill="currentColor">
+                <rect x="0" y="0" width="10" height="100" />
+                <rect x="90" y="0" width="10" height="100" />
+                <rect x="0" y="15" width="100" height="5" />
+                <rect x="0" y="30" width="100" height="5" />
+                <rect x="0" y="45" width="100" height="5" />
+                <rect x="0" y="60" width="100" height="5" />
+                <rect x="0" y="75" width="100" height="5" />
+            </svg>
+        `;
+
+        const SVG_OBSTACLE = `
+            <svg width="100%" height="100%" viewBox="0 0 100 50" preserveAspectRatio="xMidYMid meet" fill="currentColor">
+                <rect x="0" y="40" width="100" height="10" /> <!-- Base -->
+                <rect x="10" y="0" width="8" height="40" /> <!-- Left post -->
+                <rect x="82" y="0" width="8" height="40" /> <!-- Right post -->
+                <rect x="18" y="15" width="64" height="8" /> <!-- Middle bar -->
+            </svg>
+        `;
+        // --- End SVG Definitions ---
+
+
+        // Funzione per mostrare messaggi all'utente
+        function showMessage(message, duration = 2000) {
+            console.log("Showing message:", message);
+            messageBox.textContent = message;
+            messageBox.classList.add('show');
+            setTimeout(() => {
+                messageBox.classList.remove('show');
+            }, duration);
+        }
+
+        // Funzione per ridimensionare il canvas e disegnare il campo
+        function resizeCanvas() {
+            console.log("Resizing canvas...");
+            // Imposta la dimensione interna del canvas (buffer di disegno) a dimensioni fisse logiche
+            canvas.width = BASE_FIELD_WIDTH;
+            canvas.height = BASE_FIELD_HEIGHT;
+
+            // Il CSS "width: 100%; height: auto;" nel tag <style> gestirà l'adattamento al contenitore
+            // La scala di disegno verrà applicata tramite ctx.scale()
+
+            drawField();
+            // Ridisegna tutti gli elementi esistenti dopo il ridimensionamento
+            redrawAllElements();
+            console.log(`Canvas internal size: ${canvas.width}x${canvas.height} (unscaled).`);
+        }
+
+        // Funzione per disegnare il campo di calcio
+        function drawField() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Pulisce il canvas
+            ctx.fillStyle = '#6ab04c'; // Colore del campo
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Applica la scala di zoom a tutto il contesto di disegno
+            ctx.save();
+            ctx.scale(currentZoomLevel, currentZoomLevel);
+
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2; // Linee del campo non scalate qui, perché ctx.scale lo farà
+
+            const fieldType = fieldTypeSelect.value;
+
+            // Le coordinate sono ora sempre in unità logiche non scalate
+            const fieldW = BASE_FIELD_WIDTH;
+            const fieldH = BASE_FIELD_HEIGHT;
+
+            if (fieldType === 'full-pitch') {
+                // Linee esterne
+                ctx.strokeRect(0, 0, fieldW, fieldH);
+                // Linea di metà campo
+                ctx.beginPath();
+                ctx.moveTo(fieldW / 2, 0);
+                ctx.lineTo(fieldW / 2, fieldH);
+                ctx.stroke();
+                // Cerchio di centrocampo
+                ctx.beginPath();
+                ctx.arc(fieldW / 2, fieldH / 2, fieldW * 0.08, 0, Math.PI * 2);
+                ctx.stroke();
+                // Area di rigore sinistra
+                ctx.strokeRect(0, fieldH / 2 - fieldH * 0.2, fieldW * 0.15, fieldH * 0.4);
+                // Area piccola sinistra
+                ctx.strokeRect(0, fieldH / 2 - fieldH * 0.1, fieldW * 0.05, fieldH * 0.2);
+                // Punto di rigore sinistro
+                ctx.beginPath();
+                ctx.arc(fieldW * 0.11, fieldH / 2, 3, 0, Math.PI * 2); // Radius non scalato
+                ctx.fill();
+                // Area di rigore destra
+                ctx.strokeRect(fieldW - fieldW * 0.15, fieldH / 2 - fieldH * 0.2, fieldW * 0.15, fieldH * 0.4);
+                // Area piccola destra
+                ctx.strokeRect(fieldW - fieldW * 0.05, fieldH / 2 - fieldH * 0.1, fieldW * 0.05, fieldH * 0.2);
+                // Punto di rigore destro
+                ctx.beginPath();
+                ctx.arc(fieldW - fieldW * 0.11, fieldH / 2, 3, 0, Math.PI * 2); // Radius non scalato
+                ctx.fill();
+
+                // Porte (stilizzate)
+                ctx.fillStyle = 'white';
+                const goalWidth = fieldW * 0.03; // Larghezza porta
+                const goalHeight = fieldH * 0.15; // Altezza porta
+                // Porta sinistra
+                ctx.fillRect(0, fieldH / 2 - goalHeight / 2, goalWidth, goalHeight);
+                // Porta destra
+                ctx.fillRect(fieldW - goalWidth, fieldH / 2 - goalHeight / 2, goalWidth, goalHeight);
+
+            } else if (fieldType === 'half-pitch') {
+                ctx.strokeRect(0, 0, fieldW, fieldH);
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(fieldW, 0);
+                ctx.moveTo(0, fieldH);
+                ctx.lineTo(fieldW, fieldH);
+                ctx.moveTo(fieldW / 2, 0);
+                ctx.lineTo(fieldW / 2, fieldH);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(fieldW / 2, fieldH / 2, fieldW * 0.08, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.strokeRect(fieldW - fieldW * 0.15, fieldH / 2 - fieldH * 0.2, fieldW * 0.15, fieldH * 0.4);
+                ctx.strokeRect(fieldW - fieldW * 0.05, fieldH / 2 - fieldH * 0.1, fieldW * 0.05, fieldH * 0.2);
+                ctx.beginPath();
+                ctx.arc(fieldW - fieldW * 0.11, fieldH / 2, 3, 0, Math.PI * 2); // Radius non scalato
+                ctx.fill();
+
+                // Porta per metà campo
+                ctx.fillStyle = 'white';
+                const goalWidth = fieldW * 0.03; // Larghezza porta
+                const goalHeight = fieldH * 0.15; // Altezza porta
+                ctx.fillRect(fieldW - goalWidth, fieldH / 2 - goalHeight / 2, goalWidth, goalHeight);
+
+            } else if (fieldType === 'penalty-area') {
+                // This view focuses on one penalty area (e.g., the right side)
+                // Define the logical bounds of the penalty area within the BASE_FIELD
+                const penaltyAreaLogicalX = BASE_FIELD_WIDTH - BASE_FIELD_WIDTH * 0.25; // Start X for penalty box
+                const penaltyAreaLogicalY = BASE_FIELD_HEIGHT / 2 - BASE_FIELD_HEIGHT * 0.3; // Start Y for penalty box
+                const penaltyAreaLogicalWidth = BASE_FIELD_WIDTH * 0.25; // Width of penalty box
+                const penaltyAreaLogicalHeight = BASE_FIELD_HEIGHT * 0.6; // Height of penalty box
+
+                // Calculate the scale needed to fit this logical area into the full canvas
+                const scaleToFitPenaltyArea = Math.min(
+                    BASE_FIELD_WIDTH / penaltyAreaLogicalWidth,
+                    BASE_FIELD_HEIGHT / penaltyAreaLogicalHeight
+                );
+
+                // Adjust the currentZoomLevel to match this scale for drawing
+                // This means the penalty area will fill the canvas at 100% zoom
+                // For other zoom levels, it will scale from this base.
+                ctx.scale(scaleToFitPenaltyArea, scaleToFitPenaltyArea);
+                ctx.translate(-penaltyAreaLogicalX, -penaltyAreaLogicalY); // Translate to bring penalty area to origin
+
+                // Now draw everything as if the entire canvas is the full field, but it's translated and scaled
+                // The coordinates below are still relative to the BASE_FIELD_WIDTH/HEIGHT
+                const currentCanvasWidth = BASE_FIELD_WIDTH;
+                const currentCanvasHeight = BASE_FIELD_HEIGHT;
+
+                // Goal dimensions
+                const goalWidth = currentCanvasWidth * 0.05;
+                const goalHeight = currentCanvasHeight * 0.25;
+                const goalY = currentCanvasHeight / 2 - goalHeight / 2;
+
+                // Penalty area dimensions
+                const penaltyBoxDepth = currentCanvasWidth * 0.25;
+                const penaltyBoxWidth = currentCanvasHeight * 0.6;
+                const penaltyBoxX = currentCanvasWidth - penaltyBoxDepth;
+                const penaltyBoxY = currentCanvasHeight / 2 - penaltyBoxWidth / 2;
+
+                // Goal area dimensions
+                const goalAreaDepth = currentCanvasWidth * 0.08;
+                const goalAreaWidth = currentCanvasHeight * 0.3;
+                const goalAreaX = currentCanvasWidth - goalAreaDepth;
+                const goalAreaY = currentCanvasHeight / 2 - goalAreaWidth / 2;
+
+                // Penalty spot
+                const penaltySpotX = currentCanvasWidth - (currentCanvasWidth * 0.11); // 11% from goal line
+                const penaltySpotY = currentCanvasHeight / 2;
+
+                // Penalty arc
+                const penaltyArcRadius = currentCanvasWidth * 0.08; // 8% of field width
+
+                // Draw Goal
+                ctx.fillStyle = 'white';
+                ctx.fillRect(currentCanvasWidth - goalWidth, goalY, goalWidth, goalHeight);
+
+                // Draw Penalty Area Box
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(penaltyBoxX, penaltyBoxY, penaltyBoxDepth, penaltyBoxWidth);
+
+                // Draw Goal Area Box
+                ctx.strokeRect(goalAreaX, goalAreaY, goalAreaDepth, goalAreaWidth);
+
+                // Draw Penalty Spot
+                ctx.beginPath();
+                ctx.arc(penaltySpotX, penaltySpotY, 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.beginPath();
+                const startAngleArc = Math.atan2(penaltyBoxY - penaltySpotY, penaltyBoxX - penaltySpotX);
+                const endAngleArc = Math.atan2(penaltyBoxY + penaltyBoxWidth - penaltySpotY, penaltyBoxX - penaltySpotX);
+                ctx.arc(penaltySpotX, penaltySpotY, penaltyArcRadius, startAngleArc, endAngleArc);
+                ctx.stroke();
+            }
+            ctx.restore(); // Ripristina lo stato del contesto (rimuove la scala/traslazione)
+        }
+
+        // Array per memorizzare la storia dei disegni
+        let drawingHistory = [];
+
+        // Funzione per ridisegnare tutti gli elementi (disegni e oggetti)
+        function redrawAllElements() {
+            drawField(); // Ridisegna il campo (che ora include ctx.scale)
+
+            ctx.save(); // Salva lo stato del contesto per i disegni
+            ctx.scale(currentZoomLevel, currentZoomLevel); // Applica la scala per i disegni
+
+            // Ridisegna tutti i segmenti di disegno
+            drawingHistory.forEach(item => {
+                ctx.strokeStyle = item.color;
+                ctx.lineWidth = item.lineWidth; // Non scalare qui, ctx.scale lo fa
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
+                ctx.setLineDash(item.lineDash || []); // Imposta il pattern del trattino
+
+                if (item.type === 'pass' || item.type === 'run') { // Passaggio, Corsa senza palla
+                    ctx.beginPath();
+                    ctx.moveTo(item.startX, item.startY);
+                    ctx.lineTo(item.endX, item.endY);
+                    ctx.stroke();
+                    drawArrowhead(ctx, item.startX, item.startY, item.endX, item.endY, item.color, item.lineWidth);
+                } else if (item.type === 'dribble') { // Conduzione
+                    const startX = item.startX;
+                    const startY = item.startY;
+                    const endX = item.endX;
+                    const endY = item.endY;
+
+                    const dx = endX - startX;
+                    const dy = endY - startY;
+                    const length = Math.sqrt(dx * dx + dy * dy);
+                    const angle = Math.atan2(dy, dx);
+
+                    const waveAmplitude = 15; // Ampiezza dell'onda (fissa)
+                    const numSegments = Math.max(2, Math.floor(length / 20)); // Numero di segmenti per l'onda
+
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+
+                    let currentPointX = startX;
+                    let currentPointY = startY;
+
+                    for (let i = 0; i < numSegments; i++) {
+                        const t1 = i / numSegments;
+                        const t2 = (i + 0.5) / numSegments;
+                        const t3 = (i + 1) / numSegments;
+
+                        const p1x = startX + dx * t1;
+                        const p1y = startY + dy * t1;
+
+                        const p2x = startX + dx * t2;
+                        const p2y = startY + dy * t2;
+
+                        const p3x = startX + dx * t3;
+                        const p3y = startY + dy * t3;
+
+                        const offsetDirection = (i % 2 === 0) ? 1 : -1;
+                        const cpX = p2x + waveAmplitude * Math.cos(angle + Math.PI / 2) * offsetDirection;
+                        const cpY = p2y + waveAmplitude * Math.sin(angle + Math.PI / 2) * offsetDirection;
+
+                        ctx.quadraticCurveTo(cpX, cpY, p3x, p3y);
+                        currentPointX = p3x; // Aggiorna il punto finale per la freccia
+                        currentPointY = p3y; // Aggiorna il punto finale per la freccia
+                    }
+                    ctx.stroke();
+                    // Disegna la freccia all'ultimo punto della curva
+                    drawArrowhead(ctx, startX, startY, currentPointX, currentPointY, item.color, item.lineWidth);
+                } else if (item.type === 'shot') { // Tiro (doppia linea)
+                    drawDoubleLineOnCanvas(ctx, item.startX, item.startY, item.endX, item.endY, item.color, item.lineWidth);
+                } else if (item.type === 'circle') {
+                    ctx.beginPath();
+                    ctx.arc(item.centerX, item.centerY, item.radius, 0, Math.PI * 2);
+                    ctx.stroke();
+                } else if (item.type === 'rectangle') {
+                    ctx.strokeRect(item.x, item.y, item.width, item.height);
+                }
+
+                // Disegna un bordo tratteggiato se il disegno è selezionato
+                if (selectedDrawing && selectedDrawing.id === item.id) {
+                    ctx.save();
+                    ctx.strokeStyle = '#3b82f6'; // Blu
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]);
+                    if (item.type === 'pass' || item.type === 'run' || item.type === 'dribble' || item.type === 'shot') {
+                        // Per le linee, disegna un rettangolo di selezione attorno ai punti di inizio e fine
+                        const minX = Math.min(item.startX, item.endX);
+                        const maxX = Math.max(item.startX, item.endX);
+                        const minY = Math.min(item.startY, item.endY);
+                        const maxY = Math.max(item.startY, item.endY);
+                        const padding = item.lineWidth + 5; // Un po' di padding
+                        ctx.strokeRect(minX - padding, minY - padding, maxX - minX + 2 * padding, maxY - minY + 2 * padding);
+                    } else if (item.type === 'circle') {
+                        ctx.beginPath();
+                        ctx.arc(item.centerX, item.centerY, item.radius + 5, 0, Math.PI * 2);
+                        ctx.stroke();
+                    } else if (item.type === 'rectangle') {
+                        const padding = 5;
+                        ctx.strokeRect(item.x - padding, item.y - padding, item.width + 2 * padding, item.height + 2 * padding);
+                    }
+                    ctx.restore();
+                }
+            });
+            ctx.setLineDash([]); // Resetta il line dash dopo aver disegnato
+            ctx.restore(); // Ripristina lo stato del contesto (rimuove la scala per i disegni)
+
+            // Ridisegna tutti gli oggetti HTML (posizionati e scalati via CSS)
+            objects.forEach(obj => {
+                const objectElement = document.getElementById(obj.id);
+                if (objectElement) {
+                    // Scala la posizione e la dimensione visiva dell'elemento HTML
+                    objectElement.style.left = `${obj.x * currentZoomLevel}px`;
+                    objectElement.style.top = `${obj.y * currentZoomLevel}px`;
+                    objectElement.style.transform = `rotate(${obj.rotation}deg)`; // Applica rotazione
+                    
+                    // Applica colori maglia e numero se è un giocatore/portiere
+                    if (obj.type === 'player' || obj.type === 'goalkeeper') {
+                        objectElement.style.backgroundColor = obj.jerseyColor;
+                        objectElement.style.color = obj.textColor;
+                        objectElement.style.width = `${obj.size * currentZoomLevel}px`;
+                        objectElement.style.height = `${obj.size * currentZoomLevel}px`;
+                        // La dimensione del font del numero deve essere scalata con lo zoom e la dimensione dell'oggetto
+                        objectElement.querySelector('.player-number').style.fontSize = `${(obj.size * currentZoomLevel) * 0.6}px`;
+                    } else if (obj.type === 'ball' || obj.type === 'gate') {
+                        objectElement.style.fontSize = `${obj.size * currentZoomLevel}px`; // Scala la dimensione del font per emoji
+                        objectElement.style.width = `${obj.size * currentZoomLevel}px`;
+                        objectElement.style.height = `${obj.size * currentZoomLevel}px`;
+                    } else if (obj.type === 'cone' || obj.type === 'ladder' || obj.type === 'pole' || obj.type === 'obstacle') {
+                        objectElement.style.color = obj.color; // Il colore CSS imposta il fill dell'SVG
+                        if (obj.type === 'pole') {
+                            objectElement.style.backgroundColor = obj.color;
+                            objectElement.style.width = `${5 * currentZoomLevel}px`;
+                            objectElement.style.height = `${50 * currentZoomLevel}px`;
+                        } else if (obj.type === 'obstacle') {
+                            objectElement.style.width = `${obj.size * currentZoomLevel * 1.5}px`;
+                            objectElement.style.height = `${obj.size * currentZoomLevel * 0.75}px`;
+                        } else if (obj.type === 'ladder') {
+                            objectElement.style.width = `${obj.size * currentZoomLevel}px`;
+                            objectElement.style.height = `${obj.size * currentZoomLevel * (100/60)}px`;
+                        } else { // Cone
+                            objectElement.style.width = `${obj.size * currentZoomLevel}px`;
+                            objectElement.style.height = `${obj.size * currentZoomLevel}px`;
+                        }
+                    } else if (obj.type === 'text') {
+                        objectElement.textContent = obj.text; // Assicurati che il contenuto sia aggiornato
+                        objectElement.style.fontSize = `${obj.size * currentZoomLevel}px`;
+                        objectElement.style.color = obj.color;
+                        // Applica le dimensioni correnti del div (che possono essere state modificate dall'utente via resize)
+                        objectElement.style.width = `${obj.currentWidth * currentZoomLevel}px`;
+                        objectElement.style.height = `${obj.currentHeight * currentZoomLevel}px`;
+                    }
+                }
+            });
+        }
+
+        // Funzione per ottenere le coordinate del mouse/touch relative al canvas (non scalate)
+        function getCoordinates(e) {
+            const rect = canvas.getBoundingClientRect(); // Get canvas position and size in screen pixels
+            let clientX, clientY;
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            // Calculate coordinates relative to the canvas's top-left corner in screen pixels
+            const relativeX_screen = clientX - rect.left;
+            const relativeY_screen = clientY - rect.top;
+
+            // Scale these screen coordinates back to unscaled canvas coordinates
+            // Use canvas.offsetWidth and canvas.width for accurate scaling
+            const x = relativeX_screen * (canvas.width / canvas.offsetWidth);
+            const y = relativeY_screen * (canvas.height / canvas.offsetHeight);
+            return { x, y };
+        }
+
+        // Funzione helper per il hit testing di una linea
+        function isPointOnLine(px, py, x1, y1, x2, y2, tolerance) {
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            const lenSq = dx * dx + dy * dy;
+            let t = 0;
+            if (lenSq !== 0) {
+                t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+            }
+            t = Math.max(0, Math.min(1, t)); // Clamp t between 0 and 1
+
+            const closestX = x1 + t * dx;
+            const closestY = y1 + t * dy;
+
+            const distSq = Math.pow(px - closestX, 2) + Math.pow(py - closestY, 2);
+            return distSq <= Math.pow(tolerance, 2);
+        }
+
+        // Funzione helper per il hit testing di un cerchio
+        function isPointInCircle(px, py, cx, cy, r, tolerance) {
+            const dist = Math.sqrt(Math.pow(px - cx, 2) + Math.pow(py - cy, 2));
+            return Math.abs(dist - r) <= tolerance || dist <= r; // Hit if near edge or inside
+        }
+
+        // Funzione helper per il hit testing di un rettangolo
+        function isPointInRect(px, py, x, y, w, h, tolerance) {
+            const rectLeft = Math.min(x, x + w);
+            const rectRight = Math.max(x, x + w);
+            const rectTop = Math.min(y, y + h);
+            const rectBottom = Math.max(y, y + h);
+            return px >= rectLeft - tolerance && px <= rectRight + tolerance &&
+                   py >= rectTop - tolerance && py <= rectBottom + tolerance;
+        }
+
+
+        // Gestisce la selezione e il trascinamento di disegni sul canvas
+        function handleCanvasSelect(e) {
+            if (currentTool !== 'select') return; // Solo se lo strumento è 'select'
+
+            const { x, y } = getCoordinates(e); // Coordinate del mouse/touch non scalate
+
+            // Deseleziona qualsiasi oggetto o disegno precedentemente selezionato
+            if (selectedObject) {
+                document.getElementById(selectedObject.id).classList.remove('selected');
+                if (selectedObject.type === 'text') {
+                    document.getElementById(selectedObject.id).removeAttribute('contenteditable');
+                }
+                selectedObject = null;
+            }
+            if (selectedDrawing) {
+                selectedDrawing = null;
+            }
+            objectControls.classList.add('hidden'); // Nascondi i controlli per default
+            playerColorControls.classList.add('hidden');
+            document.getElementById('general-object-color-controls').classList.add('hidden');
+
+            // Cerca un disegno da selezionare/trascinare (dal più recente al più vecchio)
+            for (let i = drawingHistory.length - 1; i >= 0; i--) {
+                const item = drawingHistory[i];
+                const tolerance = (item.lineWidth / 2) + (5 / currentZoomLevel); // Tolleranza basata su larghezza linea e zoom
+
+                let isHit = false;
+                if (item.type === 'pass' || item.type === 'run' || item.type === 'shot') {
+                    isHit = isPointOnLine(x, y, item.startX, item.startY, item.endX, item.endY, tolerance);
+                } else if (item.type === 'dribble') {
+                    // Per la conduzione, il hit testing è più complesso a causa della curva.
+                    // Semplifichiamo controllando i punti di inizio e fine, o un bounding box approssimato.
+                    // Per maggiore precisione, si potrebbe campionare la curva e controllare ogni segmento.
+                    // Per ora, un bounding box è sufficiente per il trascinamento.
+                    const minX = Math.min(item.startX, item.endX);
+                    const maxX = Math.max(item.startX, item.endX);
+                    const minY = Math.min(item.startY, item.endY);
+                    const maxY = Math.max(item.startY, item.endY);
+                    isHit = isPointInRect(x, y, minX, minY, maxX - minX, maxY - minY, tolerance);
+                } else if (item.type === 'circle') {
+                    isHit = isPointInCircle(x, y, item.centerX, item.centerY, item.radius, tolerance);
+                } else if (item.type === 'rectangle') {
+                    isHit = isPointInRect(x, y, item.x, item.y, item.width, item.height, tolerance);
+                }
+
+                if (isHit) {
+                    selectedDrawing = item;
+                    draggingDrawing = item;
+                    
+                    // Calcola l'offset per il trascinamento
+                    if (item.type === 'pass' || item.type === 'run' || item.type === 'shot' || item.type === 'dribble') {
+                        dragOffsetX = x - item.startX;
+                        dragOffsetY = y - item.startY;
+                    } else if (item.type === 'circle') {
+                        dragOffsetX = x - item.centerX;
+                        dragOffsetY = y - item.centerY;
+                    } else if (item.type === 'rectangle') {
+                        dragOffsetX = x - item.x;
+                        dragOffsetY = y - item.y;
+                    }
+                    
+                    showMessage(`Disegno selezionato: ${item.type}`);
+                    // Aggiungi listener globali per il trascinamento del disegno
+                    document.addEventListener('mousemove', dragDrawingOnCanvas);
+                    document.addEventListener('mouseup', stopDrawingDragOnCanvas);
+                    document.addEventListener('touchmove', dragDrawingOnCanvas, { passive: false });
+                    document.addEventListener('touchend', stopDrawingDragOnCanvas);
+                    document.addEventListener('touchcancel', stopDrawingDragOnCanvas);
+                    redrawAllElements(); // Ridisegna per mostrare la selezione
+                    return; // Esci dopo aver trovato il primo disegno
+                }
+            }
+            redrawAllElements(); // Ridisegna per assicurarsi che nessun disegno sia selezionato
+        }
+
+        // Funzione per trascinare un disegno sul canvas
+        function dragDrawingOnCanvas(e) {
+            if (!draggingDrawing) return;
+            e.preventDefault(); // Prevents default touch/mouse actions like scrolling
+
+            const { x, y } = getCoordinates(e); // Current mouse position in unscaled canvas coordinates
+
+            // Calcola la nuova posizione del disegno
+            const newX = x - dragOffsetX;
+            const newY = y - dragOffsetY;
+
+            if (draggingDrawing.type === 'pass' || draggingDrawing.type === 'run' || draggingDrawing.type === 'shot' || draggingDrawing.type === 'dribble') {
+                const deltaX = newX - draggingDrawing.startX;
+                const deltaY = newY - draggingDrawing.startY;
+                draggingDrawing.startX = newX;
+                draggingDrawing.startY = newY;
+                draggingDrawing.endX += deltaX;
+                draggingDrawing.endY += deltaY;
+            } else if (draggingDrawing.type === 'circle') {
+                draggingDrawing.centerX = newX;
+                draggingDrawing.centerY = newY;
+            } else if (draggingDrawing.type === 'rectangle') {
+                draggingDrawing.x = newX;
+                draggingDrawing.y = newY;
+            }
+            redrawAllElements();
+            if (isRecording) {
+                recordFrame();
+            }
+        }
+
+        // Funzione per fermare il trascinamento di un disegno sul canvas
+        function stopDrawingDragOnCanvas() {
+            if (draggingDrawing) {
+                draggingDrawing = null;
+                document.removeEventListener('mousemove', dragDrawingOnCanvas);
+                document.removeEventListener('mouseup', stopDrawingDragOnCanvas);
+                document.removeEventListener('touchmove', dragDrawingOnCanvas);
+                document.removeEventListener('touchend', stopDrawingDragOnCanvas);
+                document.removeEventListener('touchcancel', stopDrawingDragOnCanvas);
+                if (isRecording) {
+                    recordFrame();
+                }
+            }
+        }
+
+
+        // Inizia il disegno sul canvas (non per gli oggetti)
+        function startDrawing(e) {
+            console.log("startDrawing triggered. Current tool:", currentTool);
+            // Se stiamo trascinando un oggetto HTML o un disegno canvas, non iniziare un nuovo disegno qui.
+            if (draggingObject || draggingDrawing) {
+                console.log("startDrawing prevented: dragging object or drawing.");
+                return;
+            }
+
+            // Se lo strumento corrente è 'select', la gestione del clic è demandata a handleCanvasSelect o handleObjectMousedown.
+            if (currentTool === 'select') {
+                console.log("startDrawing prevented: tool is select.");
+                return;
+            }
+
+            drawing = true;
+            const { x, y } = getCoordinates(e);
+            lastX = x;
+            lastY = y;
+
+            // Controlla se il clic è su un oggetto per iniziare il disegno da lì
+            const clickedObject = objects.find(obj => {
+                const objLeft = obj.x;
+                const objTop = obj.y;
+                const objWidth = obj.type === 'text' ? obj.currentWidth : obj.size;
+                const objHeight = obj.type === 'text' ? obj.currentHeight : obj.size;
+                const objRight = obj.x + objWidth;
+                const objBottom = obj.y + objHeight;
+                const tolerance = 10 / currentZoomLevel;
+                return x >= objLeft - tolerance && x <= objRight + tolerance &&
+                       y >= objTop - tolerance && y <= objBottom + tolerance;
+            });
+
+            if (clickedObject && (currentTool === 'pass' || currentTool === 'run' || currentTool === 'dribble' || currentTool === 'shot')) {
+                drawingStartPoint = { x: clickedObject.x + (clickedObject.type === 'text' ? clickedObject.currentWidth / 2 : clickedObject.size / 2),
+                                      y: clickedObject.y + (clickedObject.type === 'text' ? clickedObject.currentHeight / 2 : clickedObject.size / 2) };
+                console.log("Drawing started from clicked object center:", drawingStartPoint);
+            } else {
+                drawingStartPoint = { x, y };
+                console.log("Drawing started from mouse position:", drawingStartPoint);
+            }
+
+            if (currentTool === 'pass' || currentTool === 'run' || currentTool === 'shot' || currentTool === 'circle' || currentTool === 'rectangle' || currentTool === 'dribble') {
+                drawingHistory.push({
+                    id: `drawing-${Date.now()}`, // Assegna un ID univoco
+                    type: currentTool,
+                    color: currentColor,
+                    lineWidth: currentLineWidth,
+                    startX: drawingStartPoint.x,
+                    startY: drawingStartPoint.y,
+                    endX: drawingStartPoint.x, // Inizializza con lo stesso punto
+                    endY: drawingStartPoint.y,
+                    centerX: drawingStartPoint.x, // Per cerchio
+                    centerY: drawingStartPoint.y,
+                    radius: 0,
+                    x: drawingStartPoint.x, // Per rettangolo
+                    y: drawingStartPoint.y,
+                    width: 0,
+                    height: 0,
+                    lineDash: currentTool === 'run' ? [10, 5] : [] // Linea tratteggiata per la corsa
+                });
+            } else if (currentTool === 'erase') {
+                // Per la gomma, non aggiungiamo nulla alla history qui, gestiamo la cancellazione al movimento
+            }
+        }
+
+        // Disegna mentre il mouse/touch si muove
+        function draw(e) {
+            if (!drawing) return;
+            e.preventDefault(); // Evita lo scrolling su touch
+
+            const { x, y } = getCoordinates(e);
+
+            if (currentTool === 'erase') {
+                // Rimuovi gli elementi della drawingHistory che intersecano la gomma
+                drawingHistory = drawingHistory.filter(item => {
+                    const eraseRadius = 15 / currentZoomLevel; // Raggio di influenza della gomma (scalato inversamente)
+                    const eraseX = x;
+                    const eraseY = y;
+
+                    if (item.type === 'pass' || item.type === 'run' || item.type === 'shot' || item.type === 'dribble') {
+                        const distStart = Math.sqrt(Math.pow(item.startX - eraseX, 2) + Math.pow(item.startY - eraseY, 2));
+                        const distEnd = Math.sqrt(Math.pow(item.endX - eraseX, 2) + Math.pow(item.endY - eraseY, 2));
+                        const midX = (item.startX + item.endX) / 2;
+                        const midY = (item.startY + item.endY) / 2;
+                        const distMid = Math.sqrt(Math.pow(midX - eraseX, 2) + Math.pow(midY - eraseY, 2));
+                        return !(distStart < eraseRadius || distEnd < eraseRadius || distMid < eraseRadius);
+                    } else if (item.type === 'circle') {
+                        const distCenter = Math.sqrt(Math.pow(item.centerX - eraseX, 2) + Math.pow(item.centerY - eraseY, 2));
+                        return !(Math.abs(distCenter - item.radius) < eraseRadius || distCenter < eraseRadius);
+                    } else if (item.type === 'rectangle') {
+                        const rectLeft = Math.min(item.x, item.x + item.width);
+                        const rectRight = Math.max(item.x, item.x + item.width);
+                        const rectTop = Math.min(item.y, item.y + item.height);
+                        const rectBottom = Math.max(item.y, item.y + item.height);
+                        return !(eraseX > rectLeft - eraseRadius && eraseX < rectRight + eraseRadius &&
+                                 eraseY > rectTop - eraseRadius && eraseY < rectBottom + eraseRadius);
+                    }
+                    return true;
+                });
+                redrawAllElements(); // Ridisegna tutto dopo la cancellazione
+                return;
+            }
+
+            // Temporaneamente disegna la preview della forma/linea
+            redrawAllElements(); // Ridisegna tutto per mostrare l'anteprima della forma/linea
+
+            const currentDrawingItem = drawingHistory[drawingHistory.length - 1];
+            if (!currentDrawingItem) return; // Previene errori se drawingHistory è vuota per qualche motivo
+
+            ctx.save(); // Salva lo stato del contesto per il disegno temporaneo
+            ctx.scale(currentZoomLevel, currentZoomLevel); // Applica la scala
+
+            ctx.strokeStyle = currentColor;
+            ctx.lineWidth = currentLineWidth; // Non scalare qui
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.setLineDash(currentDrawingItem.lineDash || []);
+
+            if (currentTool === 'pass' || currentTool === 'run') { // Passaggio, Corsa senza palla
+                currentDrawingItem.endX = x;
+                currentDrawingItem.endY = y;
+
+                ctx.beginPath();
+                ctx.moveTo(currentDrawingItem.startX, currentDrawingItem.startY);
+                ctx.lineTo(currentDrawingItem.endX, currentDrawingItem.endY);
+                ctx.stroke();
+                drawArrowhead(ctx, currentDrawingItem.startX, currentDrawingItem.startY, currentDrawingItem.endX, currentDrawingItem.endY, currentColor, currentLineWidth);
+
+            } else if (currentTool === 'dribble') { // Conduzione di palla (linea ondulata)
+                currentDrawingItem.endX = x;
+                currentDrawingItem.endY = y;
+
+                const startX = currentDrawingItem.startX;
+                const startY = currentDrawingItem.startY;
+                const endX = currentDrawingItem.endX;
+                const endY = currentDrawingItem.endY;
+
+                const dx = endX - startX;
+                const dy = endY - startY;
+                const length = Math.sqrt(dx * dx + dy * dy);
+                const angle = Math.atan2(dy, dx);
+
+                const waveAmplitude = 15; // Ampiezza dell'onda (fissa)
+                const numSegments = Math.max(2, Math.floor(length / 20)); // Numero di segmenti per l'onda
+
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+
+                let currentPointX = startX;
+                let currentPointY = startY;
+
+                for (let i = 0; i < numSegments; i++) {
+                    const t1 = i / numSegments;
+                    const t2 = (i + 0.5) / numSegments;
+                    const t3 = (i + 1) / numSegments;
+
+                    const p1x = startX + dx * t1;
+                    const p1y = startY + dy * t1;
+
+                    const p2x = startX + dx * t2;
+                    const p2y = startY + dy * t2;
+
+                    const p3x = startX + dx * t3;
+                    const p3y = startY + dy * t3;
+
+                    const offsetDirection = (i % 2 === 0) ? 1 : -1;
+                    const cpX = p2x + waveAmplitude * Math.cos(angle + Math.PI / 2) * offsetDirection;
+                    const cpY = p2y + waveAmplitude * Math.sin(angle + Math.PI / 2) * offsetDirection;
+
+                    ctx.quadraticCurveTo(cpX, cpY, p3x, p3y);
+                    currentPointX = p3x; // Aggiorna il punto finale per la freccia
+                    currentPointY = p3y; // Aggiorna il punto finale per la freccia
+                }
+                ctx.stroke();
+                drawArrowhead(ctx, startX, startY, currentPointX, currentPointY, currentColor, currentLineWidth);
+
+            } else if (currentTool === 'shot') { // Tiro (doppia linea)
+                currentDrawingItem.endX = x;
+                currentDrawingItem.endY = y;
+                drawDoubleLineOnCanvas(ctx, currentDrawingItem.startX, currentDrawingItem.startY, currentDrawingItem.endX, currentDrawingItem.endY, currentColor, currentLineWidth);
+            } else if (currentTool === 'circle') {
+                const radius = Math.sqrt(Math.pow(x - currentDrawingItem.centerX, 2) + Math.pow(y - currentDrawingItem.centerY, 2));
+                currentDrawingItem.radius = radius;
+                ctx.beginPath();
+                ctx.arc(currentDrawingItem.centerX, currentDrawingItem.centerY, radius, 0, Math.PI * 2);
+                ctx.stroke();
+            } else if (currentTool === 'rectangle') {
+                const width = x - currentDrawingItem.x;
+                const height = y - currentDrawingItem.y;
+                currentDrawingItem.width = width;
+                currentDrawingItem.height = height;
+                ctx.strokeRect(currentDrawingItem.x, currentDrawingItem.y, width, height);
+            }
+            ctx.restore(); // Ripristina lo stato del contesto
+        }
+
+        // Funzione per disegnare una doppia linea (Tiro)
+        function drawDoubleLineOnCanvas(ctxToDrawOn, fromX, fromY, toX, toY, color, lineWidth) {
+            const angle = Math.atan2(toY - fromY, toX - fromX);
+            const offset = lineWidth * 0.8; // Offset per la doppia linea
+
+            ctxToDrawOn.strokeStyle = color;
+            ctxToDrawOn.lineWidth = lineWidth; // Non scalare qui
+
+            const offsetX = offset * Math.sin(angle);
+            const offsetY = offset * Math.cos(angle);
+
+            // Prima linea
+            ctxToDrawOn.beginPath();
+            ctxToDrawOn.moveTo(fromX + offsetX, fromY - offsetY);
+            ctxToDrawOn.lineTo(toX + offsetX, toY - offsetY);
+            ctxToDrawOn.stroke();
+
+            // Seconda linea
+            ctxToDrawOn.beginPath();
+            ctxToDrawOn.moveTo(fromX - offsetX, fromY + offsetY);
+            ctxToDrawOn.lineTo(toX - offsetX, toY + offsetY);
+            ctxToDrawOn.stroke();
+
+            // Punta della freccia (come per la linea singola)
+            const headlen = 10; // Lunghezza della punta della freccia (non scalata)
+            ctxToDrawOn.beginPath();
+            ctxToDrawOn.moveTo(toX + offsetX, toY - offsetY);
+            ctxToDrawOn.lineTo(toX + offsetX - headlen * Math.cos(angle - Math.PI / 6), toY - offsetY - headlen * Math.sin(angle - Math.PI / 6));
+            ctxToDrawOn.moveTo(toX + offsetX, toY - offsetY);
+            ctxToDrawOn.lineTo(toX + offsetX - headlen * Math.cos(angle + Math.PI / 6), toY + offsetY - headlen * Math.sin(angle + Math.PI / 6));
+            ctxToDrawOn.stroke();
+
+            ctxToDrawOn.beginPath();
+            ctxToDrawOn.moveTo(toX - offsetX, toY + offsetY);
+            ctxToDrawOn.lineTo(toX - offsetX - headlen * Math.cos(angle - Math.PI / 6), toY + offsetY - headlen * Math.sin(angle - Math.PI / 6));
+            ctxToDrawOn.moveTo(toX - offsetX, toY + offsetY);
+            ctxToDrawOn.lineTo(toX - offsetX - headlen * Math.cos(angle + Math.PI / 6), toY + offsetY - headlen * Math.sin(angle + Math.PI / 6));
+            ctxToDrawOn.stroke();
+        }
+
+        // Funzione per disegnare una punta di freccia
+        function drawArrowhead(ctxToDrawOn, fromX, fromY, toX, toY, color, lineWidth) {
+            const headlen = 10; // Lunghezza della punta della freccia (non scalata)
+            const angle = Math.atan2(toY - fromY, toX - fromX);
+            ctxToDrawOn.strokeStyle = color;
+            ctxToDrawOn.lineWidth = lineWidth; // Non scalare qui
+            ctxToDrawOn.beginPath();
+            ctxToDrawOn.moveTo(toX, toY);
+            ctxToDrawOn.lineTo(toX - headlen * Math.cos(angle - Math.PI / 6), toY - headlen * Math.sin(angle - Math.PI / 6));
+            ctxToDrawOn.moveTo(toX, toY);
+            ctxToDrawOn.lineTo(toX - headlen * Math.cos(angle + Math.PI / 6), toY - headlen * Math.sin(angle + Math.PI / 6));
+            ctxToDrawOn.stroke();
+        }
+
+
+        // Ferma il disegno
+        function stopDrawing() {
+            console.log("stopDrawing triggered.");
+            drawing = false;
+            ctx.setLineDash([]); // Resetta il line dash
+            if (isRecording) {
+                recordFrame(); // Registra lo stato corrente per l'animazione
+            }
+            drawingStartPoint = null; // Resetta il punto di inizio del disegno
+        }
+
+        // Funzione per gestire l'inizio del trascinamento dell'oggetto HTML
+        function handleObjectMousedown(e) {
+            let targetElement = e.currentTarget;
+
+            // Se lo strumento corrente è 'select', allora gestisci il trascinamento e la selezione
+            if (currentTool === 'select') {
+                e.preventDefault(); // Impedisce il trascinamento di default del browser o lo scrolling
+
+                console.log("--- handleObjectMousedown Triggered (Select Tool) ---");
+                console.log("Target Element:", targetElement.id);
+
+                // Deseleziona qualsiasi oggetto o disegno precedentemente selezionato
+                if (selectedObject && selectedObject.id !== targetElement.id) {
+                    document.getElementById(selectedObject.id).classList.remove('selected');
+                    if (selectedObject.type === 'text') {
+                        document.getElementById(selectedObject.id).removeAttribute('contenteditable');
+                    }
+                }
+                if (selectedDrawing) {
+                    selectedDrawing = null;
+                }
+                objectControls.classList.add('hidden'); // Nascondi i controlli per default
+                playerColorControls.classList.add('hidden');
+                document.getElementById('general-object-color-controls').classList.add('hidden');
+
+                selectedObject = objects.find(obj => obj.id === targetElement.id);
+                if (selectedObject) {
+                    console.log("Selected Object (before drag):", JSON.parse(JSON.stringify(selectedObject)));
+                    targetElement.classList.add('selected');
+                    objectControls.classList.remove('hidden'); // Mostra i controlli
+                    objectSizeInput.value = selectedObject.size;
+                    objectSizeValueSpan.textContent = `${selectedObject.size}px`;
+                    objectRotationInput.value = selectedObject.rotation;
+                    objectRotationValueSpan.textContent = `${selectedObject.rotation}°`;
+
+                    // Mostra/nascondi i controlli colore maglia/numero o colore oggetto generico
+                    if (selectedObject.type === 'player' || selectedObject.type === 'goalkeeper') {
+                        playerColorControls.classList.remove('hidden');
+                        // Aggiorna i selettori colore maglia/numero
+                        jerseyColorPickers.forEach(p => p.classList.remove('active'));
+                        const activeJerseyColorPicker = document.querySelector(`#jersey-color-pickers [data-color="${selectedObject.jerseyColor}"]`);
+                        if (activeJerseyColorPicker) activeJerseyColorPicker.classList.add('active');
+
+                        numberColorPickers.forEach(p => p.classList.remove('active'));
+                        const activeNumberColorPicker = document.querySelector(`#number-color-pickers [data-color="${selectedObject.textColor}"]`);
+                        if (activeNumberColorPicker) activeNumberColorPicker.classList.add('active');
+                    } else if (selectedObject.type === 'cone' || selectedObject.type === 'ladder' || selectedObject.type === 'pole' || selectedObject.type === 'obstacle' || selectedObject.type === 'text') {
+                        document.getElementById('general-object-color-controls').classList.remove('hidden');
+                        // Aggiorna il selettore colore oggetto generico
+                        generalObjectColorPickers.forEach(p => p.classList.remove('active'));
+                        const activeObjectColorPicker = document.querySelector(`#object-color-pickers [data-color="${selectedObject.color}"]`);
+                        if (activeObjectColorPicker) activeObjectColorPicker.classList.add('active');
+
+                        // Se è un oggetto testo, rendilo modificabile
+                        if (selectedObject.type === 'text') {
+                            targetElement.setAttribute('contenteditable', 'true');
+                            targetElement.focus(); // Metti il focus per permettere la modifica immediata
+                        }
+                    }
+
+                    showMessage(`Oggetto selezionato: ${selectedObject.type === 'player' || selectedObject.type === 'goalkeeper' ? selectedObject.number : selectedObject.type}`);
+                    
+                    // Inizia il trascinamento
+                    draggingObject = selectedObject;
+                    targetElement.classList.add('dragging');
+
+                    const { x, y } = getCoordinates(e); // Mouse position in unscaled canvas coordinates
+
+                    // Calculate offset from mouse to object's top-left corner
+                    objectOffsetX = x - selectedObject.x;
+                    objectOffsetY = y - selectedObject.y;
+
+                    console.log("Start Drag Data:", {
+                        selectedObjectX: selectedObject.x,
+                        selectedObjectY: selectedObject.y,
+                        mouseX_unscaledCanvas: x,
+                        mouseY_unscaledCanvas: y,
+                        objectOffsetX: objectOffsetX,
+                        objectOffsetY: objectOffsetY
+                    });
+
+                    // Attach global listeners for dragging
+                    document.addEventListener('mousemove', dragObject);
+                    document.addEventListener('mouseup', stopObjectDrag);
+                    document.addEventListener('touchmove', dragObject, { passive: false });
+                    document.addEventListener('touchend', stopObjectDrag);
+                    document.addEventListener('touchcancel', stopObjectDrag);
+
+                } else {
+                    console.log("handleObjectMousedown: selectedObject not found for target.id", targetElement.id);
+                }
+            } else {
+                // Se lo strumento corrente NON è 'select' (cioè è uno strumento di disegno),
+                // non fare nulla qui e lascia che l'evento si propaghi al canvas.
+                console.log(`Object clicked with drawing tool (${currentTool}). Letting canvas handle it.`);
+            }
+        }
+
+        // Funzione per gestire il trascinamento dell'oggetto HTML
+        function dragObject(e) {
+            if (!draggingObject) return;
+            e.preventDefault(); // Prevents default touch/mouse actions like scrolling
+
+            const { x, y } = getCoordinates(e); // Current mouse position in unscaled canvas coordinates
+
+            // Calculate new object position based on mouse position and initial offset
+            let newX = x - objectOffsetX;
+            let newY = y - objectOffsetY;
+
+            // Limit object within canvas bounds (unscaled coordinates)
+            // Per gli oggetti testo, la dimensione non è fissa, quindi usiamo la larghezza/altezza corrente del div
+            const currentObjWidth = draggingObject.type === 'text' ? document.getElementById(draggingObject.id).offsetWidth / currentZoomLevel : draggingObject.size;
+            const currentObjHeight = draggingObject.type === 'text' ? document.getElementById(draggingObject.id).offsetHeight / currentZoomLevel : draggingObject.size;
+
+            newX = Math.max(0, Math.min(newX, BASE_FIELD_WIDTH - currentObjWidth));
+            newY = Math.max(0, Math.min(newY, BASE_FIELD_HEIGHT - currentObjHeight));
+
+            draggingObject.x = newX;
+            draggingObject.y = newY;
+
+            const objectElement = document.getElementById(draggingObject.id);
+            if (objectElement) {
+                objectElement.style.left = `${newX * currentZoomLevel}px`;
+                objectElement.style.top = `${newY * currentZoomLevel}px`;
+            }
+
+            if (isRecording) {
+                recordFrame();
+            }
+        }
+
+        // Funzione per gestire la fine del trascinamento dell'oggetto HTML
+        function stopObjectDrag() {
+            if (draggingObject) {
+                console.log("--- STOP DRAG ---");
+                const objectElement = document.getElementById(draggingObject.id);
+                if (objectElement) {
+                    objectElement.classList.remove('dragging');
+                    // Se l'oggetto era un testo, aggiorna il suo contenuto nel modello dati
+                    if (draggingObject.type === 'text') {
+                        draggingObject.text = objectElement.textContent;
+                        // Cattura anche la dimensione attuale del div dopo il ridimensionamento dell'utente
+                        draggingObject.currentWidth = objectElement.offsetWidth / currentZoomLevel;
+                        draggingObject.currentHeight = objectElement.offsetHeight / currentZoomLevel;
+                    }
+                }
+                console.log("Final Object Position:", JSON.parse(JSON.stringify(draggingObject)));
+                draggingObject = null;
+                if (isRecording) {
+                    recordFrame(); // Registra lo stato finale per l'animazione
+                }
+                // Remove global listeners after drag ends
+                document.removeEventListener('mousemove', dragObject);
+                document.removeEventListener('mouseup', stopObjectDrag);
+                document.removeEventListener('touchmove', dragObject);
+                document.removeEventListener('touchend', stopObjectDrag);
+                document.removeEventListener('touchcancel', stopObjectDrag);
+            }
+        }
+
+        // Funzione per registrare un frame dell'animazione
+        function recordFrame() {
+            const currentObjectsState = objects.map(obj => ({
+                id: obj.id,
+                x: obj.x, // Coordinate non scalate
+                y: obj.y, // Coordinate non scalate
+                type: obj.type,
+                emoji: obj.emoji,
+                size: obj.size, // Dimensione non scalata (per font-size del testo)
+                number: obj.number,
+                jerseyColor: obj.jerseyColor,
+                textColor: obj.textColor,
+                color: obj.color, // Colore per oggetti generici
+                rotation: obj.rotation,
+                text: obj.text, // Salva il contenuto del testo
+                currentWidth: obj.currentWidth, // Salva la larghezza corrente del div testo
+                currentHeight: obj.currentHeight // Salva l'altezza corrente del div testo
+            }));
+            const currentDrawingState = JSON.parse(JSON.stringify(drawingHistory)); // Clona l'array per evitare riferimenti
+            animationFrames.push({
+                objects: currentObjectsState,
+                drawing: currentDrawingState,
+                zoom: currentZoomLevel // Registra anche il livello di zoom
+            });
+        }
+
+        // Funzione per riprodurre l'animazione
+        function playAnimation() {
+            if (animationFrames.length === 0) {
+                showMessage("Nessuna animazione registrata!");
+                return;
+            }
+
+            // Disabilita i controlli durante l'animazione
+            toggleControls(false);
+
+            let frameIndex = 0;
+            animationInterval = setInterval(() => {
+                if (frameIndex < animationFrames.length) {
+                    const frame = animationFrames[frameIndex];
+
+                    // Applica il livello di zoom del frame
+                    currentZoomLevel = frame.zoom;
+                    zoomLevelInput.value = currentZoomLevel; // Aggiorna lo slider zoom
+                    zoomLevelValueSpan.textContent = `${Math.round(currentZoomLevel * 100)}%`;
+                    resizeCanvas(); // Ridisegna il canvas con il nuovo zoom
+
+                    // Ripristina lo stato dei disegni
+                    drawingHistory = JSON.parse(JSON.stringify(frame.drawing));
+                    
+                    // Aggiorna la posizione e dimensione degli oggetti
+                    objects.forEach(obj => {
+                        const frameObject = frame.objects.find(p => p.id === obj.id);
+                        if (frameObject) {
+                            obj.x = frameObject.x;
+                            obj.y = frameObject.y;
+                            obj.size = frameObject.size; // Ripristina la dimensione dell'oggetto
+                            obj.rotation = frameObject.rotation; // Ripristina la rotazione
+                            obj.jerseyColor = frameObject.jerseyColor; // Ripristina colore maglia
+                            obj.textColor = frameObject.textColor; // Ripristina colore numero
+                            obj.color = frameObject.color; // Ripristina colore oggetto generico
+                            obj.text = frameObject.text; // Ripristina il testo
+                            obj.currentWidth = frameObject.currentWidth; // Ripristina larghezza testo
+                            obj.currentHeight = frameObject.currentHeight; // Ripristina altezza testo
+
+                            const objectElement = document.getElementById(obj.id);
+                            if (objectElement) {
+                                // Applica la scala alla posizione e dimensione visiva
+                                objectElement.style.left = `${obj.x * currentZoomLevel}px`;
+                                objectElement.style.top = `${obj.y * currentZoomLevel}px`;
+                                objectElement.style.transform = `rotate(${obj.rotation}deg)`;
+
+                                if (obj.type === 'player' || obj.type === 'goalkeeper') {
+                                    objectElement.style.width = `${obj.size * currentZoomLevel}px`;
+                                    objectElement.style.height = `${obj.size * currentZoomLevel}px`;
+                                    objectElement.style.backgroundColor = obj.jerseyColor;
+                                    objectElement.style.color = obj.textColor;
+                                    objectElement.querySelector('.player-number').style.fontSize = `${(obj.size * currentZoomLevel) * 0.6}px`;
+                                } else if (obj.type === 'ball' || obj.type === 'gate') {
+                                    objectElement.style.width = `${obj.size * currentZoomLevel}px`; // ensure width/height are set for emoji
+                                    objectElement.style.height = `${obj.size * currentZoomLevel}px`;
+                                    objectElement.style.fontSize = `${obj.size * currentZoomLevel}px`;
+                                } else if (obj.type === 'cone' || obj.type === 'ladder' || obj.type === 'pole' || obj.type === 'obstacle') {
+                                    objectElement.style.width = `${obj.size * currentZoomLevel}px`;
+                                    objectElement.style.height = `${obj.size * currentZoomLevel}px`;
+                                    if (obj.type === 'obstacle') { // Specific scaling for obstacle
+                                        objectElement.style.width = `${obj.size * currentZoomLevel * 1.5}px`;
+                                        objectElement.style.height = `${obj.size * currentZoomLevel * 0.75}px`;
+                                    } else if (obj.type === 'ladder') {
+                                        objectElement.style.height = `${obj.size * currentZoomLevel * (100/60)}px`;
+                                    } else if (obj.type === 'pole') {
+                                        objectElement.style.width = `${5 * currentZoomLevel}px`;
+                                        objectElement.style.height = `${50 * currentZoomLevel}px`;
+                                    }
+                                    objectElement.style.color = obj.color;
+                                    if (obj.type === 'pole') {
+                                        objectElement.style.backgroundColor = obj.color;
+                                    }
+                                } else if (obj.type === 'text') {
+                                    objectElement.textContent = obj.text;
+                                    objectElement.style.fontSize = `${obj.size * currentZoomLevel}px`;
+                                    objectElement.style.color = obj.color;
+                                    objectElement.style.width = `${obj.currentWidth * currentZoomLevel}px`; // Apply stored width
+                                    objectElement.style.height = `${obj.currentHeight * currentZoomLevel}px`; // Apply stored height
+                                }
+                            }
+                        }
+                    });
+                    redrawAllElements(); // Ridisegna disegni e oggetti
+
+                    frameIndex++;
+                } else {
+                    clearInterval(animationInterval);
+                    animationInterval = null;
+                    toggleControls(true); // Riabilita i controlli
+                    showMessage("Animazione terminata!");
+                }
+            }, 100); // Intervallo tra i frame (100ms)
+        }
+
+        // Funzione per abilitare/disabilitare i controlli durante l'animazione
+        function toggleControls(enable) {
+            toolButtons.forEach(button => button.disabled = !enable);
+            colorPickers.forEach(picker => picker.style.pointerEvents = enable ? 'auto' : 'none');
+            jerseyColorPickers.forEach(picker => picker.style.pointerEvents = enable ? 'auto' : 'none');
+            numberColorPickers.forEach(picker => picker.style.pointerEvents = enable ? 'auto' : 'none');
+            generalObjectColorPickers.forEach(picker => picker.style.pointerEvents = enable ? 'auto' : 'none'); // Nuovi picker
+            lineWidthInput.disabled = !enable;
+            fieldTypeSelect.disabled = !enable;
+            zoomLevelInput.disabled = !enable; // Disabilita zoom durante animazione
+            objectSizeInput.disabled = !enable; // Disabilita ridimensionamento oggetto
+            objectRotationInput.disabled = !enable; // Disabilita rotazione oggetto
+            clearButton.disabled = !enable;
+            saveButton.disabled = !enable;
+            playerButtons.querySelectorAll('button').forEach(button => button.disabled = !enable);
+            recordButton.disabled = !enable;
+            playButton.disabled = !enable || animationFrames.length === 0; // Play disabilitato se non ci sono frame
+            exerciseCommentsTextarea.disabled = !enable; // Disabilita textarea commenti
+            deleteObjectButton.disabled = !enable; // Disabilita il pulsante elimina
+        }
+
+        // Event Listeners
+        window.addEventListener('load', () => {
+            resizeCanvas();
+            // Aggiungi un osservatore per ridimensionare il canvas quando il contenitore cambia dimensione
+            const resizeObserver = new ResizeObserver(() => {
+                resizeCanvas();
+            });
+            resizeObserver.observe(canvas.parentElement);
+
+            // Registra il Service Worker
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('service-worker.js')
+                    .then(registration => {
+                        console.log('Service Worker registrato con successo:', registration);
+                        showMessage('App pronta per l\'uso offline!');
+                    })
+                    .catch(error => {
+                        console.error('Registrazione Service Worker fallita:', error);
+                        showMessage('Errore nella preparazione offline.');
+                    });
+            }
+        });
+
+        // Gestione eventi mouse/touch sul canvas (solo per il disegno, gli oggetti hanno i loro listener)
+        canvas.addEventListener('mousedown', (e) => {
+            if (currentTool === 'select') {
+                handleCanvasSelect(e); // Gestisce la selezione di disegni sul canvas
+            } else {
+                startDrawing(e); // Inizia un nuovo disegno
+            }
+        });
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseout', stopDrawing);
+        canvas.addEventListener('mousemove', draw);
+
+        canvas.addEventListener('touchstart', (e) => {
+            if (currentTool === 'select') {
+                handleCanvasSelect(e); // Gestisce la selezione di disegni sul canvas
+            } else {
+                startDrawing(e); // Inizia un nuovo disegno
+            }
+        }, { passive: false });
+        canvas.addEventListener('touchend', stopDrawing);
+        canvas.addEventListener('touchcancel', stopDrawing);
+        canvas.addEventListener('touchmove', draw, { passive: false });
+
+        // Gestione selezione strumento
+        toolButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                console.log("Tool button clicked:", button.id);
+                toolButtons.forEach(btn => btn.classList.remove('active', 'bg-blue-500', 'text-white'));
+                toolButtons.forEach(btn => {
+                    if (!btn.classList.contains('bg-red-400')) { // Evita di cambiare colore alla gomma
+                        btn.classList.add('bg-gray-200', 'text-gray-700');
+                    }
+                });
+
+                currentTool = button.id.replace('tool-', '');
+                button.classList.add('active', 'bg-blue-500', 'text-white');
+                if (currentTool === 'erase') { // Colore specifico per la gomma
+                    button.classList.remove('bg-blue-500');
+                    button.classList.add('bg-red-400');
+                } else if (currentTool === 'select') {
+                    // Nessun colore specifico, solo attivo
+                }
+
+                // Nascondi i controlli dimensione/rotazione/colore oggetto se non è selezionato lo strumento 'select'
+                if (currentTool !== 'select') {
+                    if (selectedObject) {
+                        document.getElementById(selectedObject.id).classList.remove('selected');
+                        // Se l'oggetto deselezionato era un testo, rimuovi l'attributo contenteditable
+                        if (selectedObject.type === 'text') {
+                            document.getElementById(selectedObject.id).removeAttribute('contenteditable');
+                        }
+                        selectedObject = null;
+                        console.log("Deselecting object because tool is not 'select'.");
+                    }
+                    if (selectedDrawing) {
+                        selectedDrawing = null;
+                        redrawAllElements(); // Ridisegna per rimuovere la selezione del disegno
+                    }
+                    objectControls.classList.add('hidden');
+                    playerColorControls.classList.add('hidden');
+                    generalObjectColorPickers.forEach(p => p.classList.remove('active')); // Deseleziona i picker generali
+                    document.getElementById('general-object-color-controls').classList.add('hidden');
+                }
+                showMessage(`Strumento selezionato: ${button.title}`);
+            });
+        });
+
+        // Gestione selezione colore linea disegno
+        colorPickers.forEach(picker => {
+            picker.addEventListener('click', () => {
+                colorPickers.forEach(p => p.classList.remove('active'));
+                picker.classList.add('active');
+                currentColor = picker.dataset.color;
+                showMessage(`Colore linea disegno selezionato: ${currentColor}`);
+            });
+        });
+
+        // Gestione spessore linea disegno
+        lineWidthInput.addEventListener('input', () => {
+            currentLineWidth = parseInt(lineWidthInput.value);
+            lineWidthValueSpan.textContent = currentLineWidth;
+        });
+
+        // Gestione dimensione oggetto selezionato
+        objectSizeInput.addEventListener('input', () => {
+            if (selectedObject) {
+                selectedObject.size = parseInt(objectSizeInput.value);
+                objectSizeValueSpan.textContent = `${selectedObject.size}px`;
+                const objectElement = document.getElementById(selectedObject.id);
+                if (objectElement) {
+                    if (selectedObject.type === 'player' || selectedObject.type === 'goalkeeper') {
+                        objectElement.style.width = `${selectedObject.size * currentZoomLevel}px`;
+                        objectElement.style.height = `${selectedObject.size * currentZoomLevel}px`;
+                        objectElement.querySelector('.player-number').style.fontSize = `${(selectedObject.size * currentZoomLevel) * 0.6}px`;
+                    } else if (selectedObject.type === 'ball' || selectedObject.type === 'gate') {
+                        objectElement.style.fontSize = `${selectedObject.size * currentZoomLevel}px`;
+                    } else if (selectedObject.type === 'text') {
+                        objectElement.style.fontSize = `${selectedObject.size * currentZoomLevel}px`;
+                        // Per il testo, la dimensione del div è gestita dal CSS resize o dal contenuto,
+                        // ma la "size" nell'oggetto si riferisce al font-size.
+                    } else { // Coni, Scalette, Ostacoli, Paletti
+                        objectElement.style.width = `${selectedObject.size * currentZoomLevel}px`;
+                        objectElement.style.height = `${selectedObject.size * currentZoomLevel}px`;
+                        if (selectedObject.type === 'obstacle') {
+                            objectElement.style.width = `${selectedObject.size * currentZoomLevel * 1.5}px`;
+                            objectElement.style.height = `${selectedObject.size * currentZoomLevel * 0.75}px`;
+                        } else if (selectedObject.type === 'ladder') {
+                            objectElement.style.height = `${selectedObject.size * currentZoomLevel * (100/60)}px`;
+                        } else if (selectedObject.type === 'pole') {
+                            objectElement.style.width = `${5 * currentZoomLevel}px`;
+                            objectElement.style.height = `${50 * currentZoomLevel}px`;
+                        }
+                    }
+                }
+                if (isRecording) {
+                    recordFrame();
+                }
+            }
+        });
+
+        // Gestione rotazione oggetto selezionato
+        objectRotationInput.addEventListener('input', () => {
+            if (selectedObject) {
+                selectedObject.rotation = parseInt(objectRotationInput.value);
+                objectRotationValueSpan.textContent = `${selectedObject.rotation}°`;
+                const objectElement = document.getElementById(selectedObject.id);
+                if (objectElement) {
+                    objectElement.style.transform = `rotate(${selectedObject.rotation}deg)`;
+                }
+                if (isRecording) {
+                    recordFrame();
+                }
+            }
+        });
+
+        // Gestione colore maglia giocatore selezionato
+        jerseyColorPickers.forEach(picker => {
+            picker.addEventListener('click', () => {
+                if (selectedObject && (selectedObject.type === 'player' || selectedObject.type === 'goalkeeper')) {
+                    jerseyColorPickers.forEach(p => p.classList.remove('active'));
+                    picker.classList.add('active');
+                    selectedObject.jerseyColor = picker.dataset.color;
+                    const objectElement = document.getElementById(selectedObject.id);
+                    if (objectElement) {
+                        objectElement.style.backgroundColor = selectedObject.jerseyColor;
+                    }
+                    showMessage(`Colore maglia: ${selectedObject.jerseyColor}`);
+                    if (isRecording) {
+                        recordFrame();
+                    }
+                }
+            });
+        });
+
+        // Gestione colore numero giocatore selezionato
+        numberColorPickers.forEach(picker => {
+            picker.addEventListener('click', () => {
+                if (selectedObject && (selectedObject.type === 'player' || selectedObject.type === 'goalkeeper')) {
+                    numberColorPickers.forEach(p => p.classList.remove('active'));
+                    picker.classList.add('active');
+                    selectedObject.textColor = picker.dataset.color;
+                    const objectElement = document.getElementById(selectedObject.id);
+                    if (objectElement) {
+                        objectElement.style.color = selectedObject.textColor;
+                    }
+                    showMessage(`Colore numero: ${selectedObject.textColor}`);
+                    if (isRecording) {
+                        recordFrame();
+                    }
+                }
+            });
+        });
+
+        // Gestione colore oggetto generico selezionato
+        generalObjectColorPickers.forEach(picker => {
+            picker.addEventListener('click', () => {
+                if (selectedObject && (selectedObject.type === 'cone' || selectedObject.type === 'ladder' || selectedObject.type === 'pole' || selectedObject.type === 'obstacle' || selectedObject.type === 'text')) {
+                    generalObjectColorPickers.forEach(p => p.classList.remove('active'));
+                    picker.classList.add('active');
+                    selectedObject.color = picker.dataset.color;
+                    const objectElement = document.getElementById(selectedObject.id);
+                    if (objectElement) {
+                        objectElement.style.color = selectedObject.color; // Per SVG e Testo
+                        if (selectedObject.type === 'pole') { // Per il paletto che usa background-color
+                            objectElement.style.backgroundColor = selectedObject.color;
+                        }
+                    }
+                    showMessage(`Colore oggetto: ${selectedObject.color}`);
+                    if (isRecording) {
+                        recordFrame();
+                    }
+                }
+            });
+        });
+
+        // Funzione per eliminare l'oggetto selezionato
+        deleteObjectButton.addEventListener('click', () => {
+            if (selectedObject) {
+                showMessage(`Sei sicuro di voler eliminare l'oggetto selezionato (${selectedObject.type === 'player' || selectedObject.type === 'goalkeeper' ? selectedObject.number : selectedObject.type})? Clicca di nuovo per confermare.`, 3000);
+                const originalDeleteClick = deleteObjectButton.onclick;
+                deleteObjectButton.onclick = () => {
+                    const objectElement = document.getElementById(selectedObject.id);
+                    if (objectElement) {
+                        objectElement.remove(); // Rimuovi l'elemento HTML
+                    }
+                    // Rimuovi l'oggetto dall'array
+                    objects = objects.filter(obj => obj.id !== selectedObject.id);
+                    
+                    selectedObject = null; // Deseleziona l'oggetto
+                    objectControls.classList.add('hidden'); // Nascondi i controlli
+                    playerColorControls.classList.add('hidden');
+                    document.getElementById('general-object-color-controls').classList.add('hidden');
+
+                    redrawAllElements(); // Ridisegna il canvas senza l'oggetto eliminato
+                    showMessage("Oggetto eliminato!");
+                    deleteObjectButton.onclick = originalDeleteClick; // Ripristina la funzione originale
+                    if (isRecording) {
+                        recordFrame(); // Registra l'eliminazione dell'oggetto
+                    }
+                };
+            } else if (selectedDrawing) {
+                showMessage(`Sei sicuro di voler eliminare il disegno selezionato (${selectedDrawing.type})? Clicca di nuovo per confermare.`, 3000);
+                const originalDeleteClick = deleteObjectButton.onclick;
+                deleteObjectButton.onclick = () => {
+                    drawingHistory = drawingHistory.filter(item => item.id !== selectedDrawing.id);
+                    selectedDrawing = null;
+                    objectControls.classList.add('hidden'); // Nascondi i controlli (anche se non usati per i disegni)
+                    redrawAllElements();
+                    showMessage("Disegno eliminato!");
+                    deleteObjectButton.onclick = originalDeleteClick;
+                    if (isRecording) {
+                        recordFrame();
+                    }
+                };
+            } else {
+                showMessage("Nessun oggetto o disegno selezionato da eliminare.");
+            }
+        });
+
+
+        // Gestione pulizia lavagna
+        clearButton.addEventListener('click', () => {
+            showMessage("Sei sicuro di voler pulire la lavagna? Clicca di nuovo per confermare.", 3000);
+            // Salva la funzione originale per ripristinarla dopo la conferma
+            const originalClearClick = clearButton.onclick; 
+            clearButton.onclick = () => { // Cambia la funzione onclick per la conferma
+                // Pulisci i disegni
+                drawingHistory = [];
+                // Rimuovi tutti gli oggetti HTML dal DOM
+                objects.forEach(obj => {
+                    const objectElement = document.getElementById(obj.id);
+                    if (objectElement) objectElement.remove();
+                });
+                // Pulisci l'array degli oggetti
+                objects = [];
+                animationFrames = []; // Pulisci anche i frame dell'animazione
+                playButton.disabled = true;
+
+                // Deseleziona qualsiasi oggetto o disegno attualmente selezionato
+                if (selectedObject) {
+                    document.getElementById(selectedObject.id).classList.remove('selected');
+                    if (selectedObject.type === 'text') {
+                        document.getElementById(selectedObject.id).removeAttribute('contenteditable');
+                    }
+                    selectedObject = null;
+                }
+                if (selectedDrawing) {
+                    selectedDrawing = null;
+                }
+                objectControls.classList.add('hidden');
+                playerColorControls.classList.add('hidden');
+                generalObjectColorPickers.forEach(p => p.classList.remove('active')); // Deseleziona i picker generali
+                document.getElementById('general-object-color-controls').classList.add('hidden');
+                
+                playerCounter = 1; // Resetta il contatore dei giocatori
+                exerciseCommentsTextarea.value = ''; // Pulisci i commenti dell'esercizio
+                redrawAllElements(); // Ridisegna il campo pulito e gli elementi rimanenti
+                showMessage("Lavagna pulita!");
+                clearButton.onclick = originalClearClick; // Ripristina la funzione onclick originale
+            };
+        });
+
+        // Funzione per disegnare SVG su canvas
+        function drawSvgOnCanvas(ctxToDrawOn, svgString, x, y, width, height, rotation, color) {
+            return new Promise((resolve) => {
+                const img = new Image();
+                // Encode SVG string to be used as data URL
+                const svgData = `data:image/svg+xml;utf8,${encodeURIComponent(svgString.replace('currentColor', color))}`;
+                img.src = svgData;
+
+                img.onload = () => {
+                    ctxToDrawOn.save();
+                    ctxToDrawOn.translate(x + width / 2, y + height / 2);
+                    ctxToDrawOn.rotate(rotation * Math.PI / 180);
+                    ctxToDrawOn.drawImage(img, -width / 2, -height / 2, width, height);
+                    ctxToDrawOn.restore();
+                    resolve();
+                };
+                img.onerror = (error) => {
+                    console.error("Error loading SVG image for canvas:", error);
+                    resolve(); // Resolve anyway to not block the saving process
+                };
+            });
+        }
+
+        // Funzione per disegnare una palla da calcio stilizzata sul canvas
+        function drawSoccerBall(ctxToDrawOn, x, y, size, rotation) {
+            ctxToDrawOn.save();
+            ctxToDrawOn.translate(x + size / 2, y + size / 2); // Trasla al centro della palla
+            ctxToDrawOn.rotate(rotation * Math.PI / 180); // Applica rotazione
+
+            const radius = size / 2;
+            const center = { x: 0, y: 0 }; // Relativo al contesto traslato
+
+            // Disegna il cerchio principale
+            ctxToDrawOn.beginPath();
+            ctxToDrawOn.arc(center.x, center.y, radius, 0, Math.PI * 2);
+            ctxToDrawOn.fillStyle = 'white'; // Sfondo bianco predefinito per la palla
+            ctxToDrawOn.fill();
+            ctxToDrawOn.strokeStyle = 'black';
+            ctxToDrawOn.lineWidth = 2;
+            ctxToDrawOn.stroke();
+
+            // Disegna un pentagono centrale (semplificato per effetto visivo)
+            const pentagonSide = radius * 0.4;
+            ctxToDrawOn.beginPath();
+            for (let i = 0; i < 5; i++) {
+                const angle = (Math.PI / 5) * (2 * i + 1); // Inizia dal punto in alto
+                const px = center.x + pentagonSide * Math.sin(angle);
+                const py = center.y - pentagonSide * Math.cos(angle);
+                if (i === 0) {
+                    ctxToDrawOn.moveTo(px, py);
+                } else {
+                    ctxToDrawOn.lineTo(px, py);
+                }
+            }
+            ctxToDrawOn.closePath();
+            ctxToDrawOn.fillStyle = 'black';
+            ctxToDrawOn.fill();
+            ctxToDrawOn.stroke();
+
+            ctxToDrawOn.restore();
+        }
+
+        // Funzione per disegnare il campo per il salvataggio (su tempCtx)
+        function drawFieldForSave(ctxToDrawOn, width, height, scale) {
+            ctxToDrawOn.fillStyle = '#6ab04c'; // Colore del campo
+            ctxToDrawOn.fillRect(0, 0, width, height);
+
+            ctxToDrawOn.strokeStyle = 'white';
+            ctxToDrawOn.lineWidth = 2 * scale; // Scala la larghezza delle linee del campo
+
+            const fieldType = fieldTypeSelect.value;
+
+            // Le coordinate sono ora sempre in unità logiche non scalate
+            const fieldW = BASE_FIELD_WIDTH * scale;
+            const fieldH = BASE_FIELD_HEIGHT * scale;
+
+            if (fieldType === 'full-pitch') {
+                ctxToDrawOn.strokeRect(0, 0, fieldW, fieldH);
+                ctxToDrawOn.beginPath();
+                ctxToDrawOn.moveTo(fieldW / 2, 0);
+                ctxToDrawOn.lineTo(fieldW / 2, fieldH);
+                ctxToDrawOn.stroke();
+                ctxToDrawOn.beginPath();
+                ctxToDrawOn.arc(fieldW / 2, fieldH / 2, fieldW * 0.08, 0, Math.PI * 2);
+                ctxToDrawOn.stroke();
+                ctxToDrawOn.strokeRect(0, fieldH / 2 - fieldH * 0.2, fieldW * 0.15, fieldH * 0.4);
+                ctxToDrawOn.strokeRect(0, fieldH / 2 - fieldH * 0.1, fieldW * 0.05, fieldH * 0.2);
+                ctxToDrawOn.beginPath();
+                ctxToDrawOn.arc(fieldW * 0.11, fieldH / 2, 3 * scale, 0, Math.PI * 2);
+                ctxToDrawOn.fill();
+                ctxToDrawOn.strokeRect(fieldW - fieldW * 0.15, fieldH / 2 - fieldH * 0.2, fieldW * 0.15, fieldH * 0.4);
+                ctxToDrawOn.strokeRect(fieldW - fieldW * 0.05, fieldH / 2 - fieldH * 0.1, fieldW * 0.05, fieldH * 0.2);
+                ctxToDrawOn.beginPath();
+                ctxToDrawOn.arc(fieldW - fieldW * 0.11, fieldH / 2, 3 * scale, 0, Math.PI * 2);
+                ctxToDrawOn.fill();
+
+                ctxToDrawOn.fillStyle = 'white';
+                const goalWidth = fieldW * 0.03;
+                const goalHeight = fieldH * 0.15;
+                ctxToDrawOn.fillRect(0, fieldH / 2 - goalHeight / 2, goalWidth, goalHeight);
+                ctxToDrawOn.fillRect(fieldW - goalWidth, fieldH / 2 - goalHeight / 2, goalWidth, goalHeight);
+
+            } else if (fieldType === 'half-pitch') {
+                ctxToDrawOn.strokeRect(0, 0, fieldW, fieldH);
+                ctxToDrawOn.beginPath();
+                ctxToDrawOn.moveTo(0, 0);
+                ctxToDrawOn.lineTo(fieldW, 0);
+                ctxToDrawOn.moveTo(0, fieldH);
+                ctxToDrawOn.lineTo(fieldW, fieldH);
+                ctxToDrawOn.moveTo(fieldW / 2, 0);
+                ctxToDrawOn.lineTo(fieldW / 2, fieldH);
+                ctxToDrawOn.stroke();
+                ctxToDrawOn.beginPath();
+                ctxToDrawOn.arc(fieldW / 2, fieldH / 2, fieldW * 0.08, 0, Math.PI * 2);
+                ctxToDrawOn.stroke();
+                ctxToDrawOn.strokeRect(fieldW - fieldW * 0.15, fieldH / 2 - fieldH * 0.2, fieldW * 0.15, fieldH * 0.4);
+                ctxToDrawOn.strokeRect(fieldW - fieldW * 0.05, fieldH / 2 - fieldH * 0.1, fieldW * 0.05, fieldH * 0.2);
+                ctxToDrawOn.beginPath();
+                ctxToDrawOn.arc(fieldW - fieldW * 0.11, fieldH / 2, 3 * scale, 0, Math.PI * 2);
+                ctxToDrawOn.fill();
+
+                ctxToDrawOn.fillStyle = 'white';
+                const goalWidth = fieldW * 0.03;
+                const goalHeight = fieldH * 0.15;
+                ctxToDrawOn.fillRect(fieldW - goalWidth, fieldH / 2 - goalHeight / 2, goalWidth, goalHeight);
+
+            } else if (fieldType === 'penalty-area') {
+                // Define the logical bounds of the penalty area within the BASE_FIELD
+                const penaltyAreaLogicalX = BASE_FIELD_WIDTH - BASE_FIELD_WIDTH * 0.25; // Start X for penalty box
+                const penaltyAreaLogicalY = BASE_FIELD_HEIGHT / 2 - BASE_FIELD_HEIGHT * 0.3; // Start Y for penalty box
+                const penaltyAreaLogicalWidth = BASE_FIELD_WIDTH * 0.25; // Width of penalty box
+                const penaltyAreaLogicalHeight = BASE_FIELD_HEIGHT * 0.6; // Height of penalty box
+
+                // Calculate the scale needed to fit this logical area into the full canvas
+                const scaleToFitPenaltyArea = Math.min(
+                    BASE_FIELD_WIDTH / penaltyAreaLogicalWidth,
+                    BASE_FIELD_HEIGHT / penaltyAreaLogicalHeight
+                );
+
+                ctxToDrawOn.save();
+                ctxToDrawOn.scale(scaleToFitPenaltyArea * scale, scaleToFitPenaltyArea * scale);
+                ctxToDrawOn.translate(-penaltyAreaLogicalX, -penaltyAreaLogicalY);
+
+                const currentCanvasWidth = BASE_FIELD_WIDTH; // Use logical width
+                const currentCanvasHeight = BASE_FIELD_HEIGHT; // Use logical height
+
+                const goalWidth = currentCanvasWidth * 0.05;
+                const goalHeight = currentCanvasHeight * 0.25;
+                const goalY = currentCanvasHeight / 2 - goalHeight / 2;
+
+                const penaltyBoxDepth = currentCanvasWidth * 0.25;
+                const penaltyBoxWidth = currentCanvasHeight * 0.6;
+                const penaltyBoxX = currentCanvasWidth - penaltyBoxDepth;
+                const penaltyBoxY = currentCanvasHeight / 2 - penaltyBoxWidth / 2;
+
+                const goalAreaDepth = currentCanvasWidth * 0.08;
+                const goalAreaWidth = currentCanvasHeight * 0.3;
+                const goalAreaX = currentCanvasWidth - goalAreaDepth;
+                const goalAreaY = currentCanvasHeight / 2 - goalAreaWidth / 2;
+
+                const penaltySpotX = currentCanvasWidth - (currentCanvasWidth * 0.11);
+                const penaltySpotY = currentCanvasHeight / 2;
+
+                const penaltyArcRadius = currentCanvasWidth * 0.08;
+
+                ctxToDrawOn.fillStyle = 'white';
+                ctxToDrawOn.fillRect(currentCanvasWidth - goalWidth, goalY, goalWidth, goalHeight);
+
+                ctxToDrawOn.strokeStyle = 'white';
+                ctxToDrawOn.lineWidth = 2; // Not scaled here, handled by ctx.scale above
+                ctxToDrawOn.strokeRect(penaltyBoxX, penaltyBoxY, penaltyBoxDepth, penaltyBoxWidth);
+
+                ctxToDrawOn.strokeRect(goalAreaX, goalAreaY, goalAreaDepth, goalAreaWidth);
+
+                ctxToDrawOn.beginPath();
+                ctxToDrawOn.arc(penaltySpotX, penaltySpotY, 3, 0, Math.PI * 2);
+                ctxToDrawOn.fill();
+
+                ctxToDrawOn.beginPath();
+                const startAngleArc = Math.atan2(penaltyBoxY - penaltySpotY, penaltyBoxX - penaltySpotX);
+                const endAngleArc = Math.atan2(penaltyBoxY + penaltyBoxWidth - penaltySpotY, penaltyBoxX - penaltySpotX);
+                ctxToDrawOn.arc(penaltySpotX, penaltySpotY, penaltyArcRadius, startAngleArc, endAngleArc);
+                ctxToDrawOn.stroke();
+                ctxToDrawOn.restore();
+            }
+        }
+
+
+        // Gestione salvataggio immagine
+        saveButton.addEventListener('click', async () => {
+            // Temporaneamente nascondi gli oggetti HTML per il salvataggio del canvas
+            objects.forEach(obj => {
+                const objectElement = document.getElementById(obj.id);
+                if (objectElement) objectElement.style.display = 'none';
+            });
+
+            const saveWidth = BASE_FIELD_WIDTH * SAVE_RESOLUTION_MULTIPLIER;
+            const saveHeight = BASE_FIELD_HEIGHT * SAVE_RESOLUTION_MULTIPLIER;
+            const saveScale = SAVE_RESOLUTION_MULTIPLIER;
+
+            const commentsText = exerciseCommentsTextarea.value;
+            const commentsFont = `${24 * saveScale}px Inter, sans-serif`; // Dimensione font per i commenti
+            const commentsLineHeight = 30 * saveScale; // Altezza riga per i commenti
+            const commentsPadding = 20 * saveScale; // Padding tra campo e commenti
+
+            // Calcola l'altezza necessaria per i commenti
+            let totalCommentsHeight = 0;
+            if (commentsText) {
+                const tempCtxForTextMeasurement = document.createElement('canvas').getContext('2d');
+                tempCtxForTextMeasurement.font = commentsFont;
+                const lines = wrapText(tempCtxForTextMeasurement, commentsText, saveWidth - commentsPadding * 2);
+                totalCommentsHeight = lines.length * commentsLineHeight + commentsPadding * 2;
+            }
+
+            const totalImageHeight = saveHeight + totalCommentsHeight;
+
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = saveWidth;
+            tempCanvas.height = totalImageHeight;
+            tempCtx.fillStyle = '#f0f4f8'; // Sfondo generale dell'immagine
+            tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+
+
+            // Disegna il campo sul canvas temporaneo
+            drawFieldForSave(tempCtx, saveWidth, saveHeight, saveScale);
+
+            // Disegna i disegni dal drawingHistory sul canvas temporaneo
+            drawingHistory.forEach(item => {
+                tempCtx.strokeStyle = item.color;
+                tempCtx.lineWidth = item.lineWidth * saveScale; // Scala la larghezza delle linee disegnate
+                tempCtx.lineCap = 'round';
+                tempCtx.lineJoin = 'round';
+                tempCtx.setLineDash(item.lineDash.map(dash => dash * saveScale) || []); // Scala anche i trattini
+
+                if (item.type === 'pass' || item.type === 'run') {
+                    tempCtx.beginPath();
+                    tempCtx.moveTo(item.startX * saveScale, item.startY * saveScale);
+                    tempCtx.lineTo(item.endX * saveScale, item.endY * saveScale);
+                    tempCtx.stroke();
+                    drawArrowhead(tempCtx, item.startX * saveScale, item.startY * saveScale, item.endX * saveScale, item.endY * saveScale, item.color, item.lineWidth * saveScale);
+                } else if (item.type === 'dribble') {
+                    const startX = item.startX * saveScale;
+                    const startY = item.startY * saveScale;
+                    const endX = item.endX * saveScale;
+                    const endY = item.endY * saveScale;
+
+                    const dx = endX - startX;
+                    const dy = endY - startY;
+                    const length = Math.sqrt(dx * dx + dy * dy);
+                    const angle = Math.atan2(dy, dx);
+
+                    const waveAmplitude = 15 * saveScale; // Scala l'ampiezza dell'onda
+                    const numSegments = Math.max(2, Math.floor(length / (20 * saveScale))); // Scala il numero di segmenti
+
+                    tempCtx.beginPath();
+                    tempCtx.moveTo(startX, startY);
+
+                    let currentPointX = startX;
+                    let currentPointY = startY;
+
+                    for (let i = 0; i < numSegments; i++) {
+                        const t1 = i / numSegments;
+                        const t2 = (i + 0.5) / numSegments;
+                        const t3 = (i + 1) / numSegments;
+
+                        const p1x = startX + dx * t1;
+                        const p1y = startY + dy * t1;
+
+                        const p2x = startX + dx * t2;
+                        const p2y = startY + dy * t2;
+
+                        const p3x = startX + dx * t3;
+                        const p3y = startY + dy * t3;
+
+                        const offsetDirection = (i % 2 === 0) ? 1 : -1;
+                        const cpX = p2x + waveAmplitude * Math.cos(angle + Math.PI / 2) * offsetDirection;
+                        const cpY = p2y + waveAmplitude * Math.sin(angle + Math.PI / 2) * offsetDirection;
+
+                        tempCtx.quadraticCurveTo(cpX, cpY, p3x, p3y);
+                        currentPointX = p3x;
+                        currentPointY = p3y;
+                    }
+                    tempCtx.stroke();
+                    drawArrowhead(tempCtx, startX, startY, currentPointX, currentPointY, item.color, item.lineWidth * saveScale);
+                } else if (item.type === 'shot') {
+                    drawDoubleLineOnCanvas(tempCtx, item.startX * saveScale, item.startY * saveScale, item.endX * saveScale, item.endY * saveScale, item.color, item.lineWidth * saveScale);
+                } else if (item.type === 'circle') {
+                    tempCtx.beginPath();
+                    tempCtx.arc(item.centerX * saveScale, item.centerY * saveScale, item.radius * saveScale, 0, Math.PI * 2);
+                    tempCtx.stroke();
+                } else if (item.type === 'rectangle') {
+                    tempCtx.strokeRect(item.x * saveScale, item.y * saveScale, item.width * saveScale, item.height * saveScale);
+                }
+            });
+            tempCtx.setLineDash([]); // Resetta il line dash
+
+            // Disegna gli oggetti sul canvas temporaneo
+            for (const obj of objects) {
+                const scaledX = obj.x * saveScale;
+                const scaledY = obj.y * saveScale;
+                const scaledSize = obj.size * saveScale;
+
+                tempCtx.save(); // Salva lo stato del contesto
+                tempCtx.translate(scaledX + scaledSize / 2, scaledY + scaledSize / 2);
+                tempCtx.rotate(obj.rotation * Math.PI / 180); // Applica la rotazione in radianti
+
+                if (obj.type === 'player' || obj.type === 'goalkeeper') {
+                    tempCtx.fillStyle = obj.jerseyColor;
+                    tempCtx.beginPath();
+                    tempCtx.arc(0, 0, scaledSize / 2, 0, Math.PI * 2);
+                    tempCtx.fill();
+                    tempCtx.strokeStyle = obj.textColor; // Bordo del giocatore
+                    tempCtx.lineWidth = 2 * saveScale;
+                    tempCtx.stroke();
+
+                    tempCtx.fillStyle = obj.textColor;
+                    // Adjusted font size for saving to prevent shrinking
+                    const fontSizeForSave = scaledSize * 0.6; // Use the same 0.6 ratio
+                    tempCtx.font = `${fontSizeForSave}px Arial`;
+                    tempCtx.textAlign = 'center';
+                    tempCtx.textBaseline = 'middle';
+                    tempCtx.fillText(obj.number, 0, 0);
+                } else if (obj.type === 'ball') {
+                    // Disegna la palla da calcio stilizzata
+                    drawSoccerBall(tempCtx, -scaledSize / 2, -scaledSize / 2, scaledSize, 0); // Rotation handled by translate/rotate above
+                } else if (obj.type === 'gate') {
+                    tempCtx.font = `${scaledSize}px Arial`; // Usa la dimensione scalata per il font emoji
+                    tempCtx.textAlign = 'center';
+                    tempCtx.textBaseline = 'middle';
+                    tempCtx.fillText(obj.emoji, 0, 0);
+                } else if (obj.type === 'cone') {
+                    await drawSvgOnCanvas(tempCtx, SVG_CONE, -scaledSize / 2, -scaledSize / 2, scaledSize, scaledSize, 0, obj.color);
+                } else if (obj.type === 'ladder') {
+                    const ladderWidth = scaledSize;
+                    const ladderHeight = scaledSize * (100/60); // Mantieni proporzioni 60x100
+                    await drawSvgOnCanvas(tempCtx, SVG_LADDER, -ladderWidth / 2, -ladderHeight / 2, ladderWidth, ladderHeight, 0, obj.color);
+                } else if (obj.type === 'pole') {
+                    tempCtx.fillStyle = obj.color;
+                    tempCtx.fillRect(-scaledSize / 10, -scaledSize / 2, scaledSize / 5, scaledSize);
+                } else if (obj.type === 'obstacle') {
+                    const obstacleWidth = scaledSize * 1.5; // Make obstacle wider
+                    const obstacleHeight = scaledSize * 0.75; // Make obstacle shorter
+                    await drawSvgOnCanvas(tempCtx, SVG_OBSTACLE, -obstacleWidth / 2, -obstacleHeight / 2, obstacleWidth, obstacleHeight, 0, obj.color);
+                } else if (obj.type === 'text') {
+                    tempCtx.fillStyle = obj.color;
+                    tempCtx.font = `${obj.size * saveScale}px Inter, sans-serif`; // Use obj.size for font size
+                    tempCtx.textAlign = 'left';
+                    tempCtx.textBaseline = 'top';
+                    // Per il testo, disegniamo su un rettangolo che rappresenta la dimensione del div
+                    const textX = -obj.currentWidth / 2 * saveScale; // Relative to current translation
+                    const textY = -obj.currentHeight / 2 * saveScale; // Relative to current translation
+                    const textWidth = obj.currentWidth * saveScale;
+                    const textHeight = obj.currentHeight * saveScale;
+
+                    // Disegna lo sfondo del testo
+                    tempCtx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                    tempCtx.fillRect(textX, textY, textWidth, textHeight);
+                    tempCtx.strokeStyle = 'black';
+                    tempCtx.lineWidth = 1;
+                    tempCtx.strokeRect(textX, textY, textWidth, textHeight);
+
+                    tempCtx.fillStyle = obj.color;
+                    // Split text into lines if it's multiline
+                    const lines = wrapText(tempCtx, obj.text, textWidth - 10); // 10px padding
+                    const lineHeight = obj.size * saveScale * 1.2; // 1.2 is a common line height multiplier
+                    for (let i = 0; i < lines.length; i++) {
+                        tempCtx.fillText(lines[i], textX + 5, textY + 5 + i * lineHeight); // Add some padding
+                    }
+                }
+                tempCtx.restore(); // Ripristina lo stato del contesto
+            }
+
+            // Disegna i commenti dell'esercizio sotto il campo
+            if (commentsText) {
+                tempCtx.fillStyle = '#333'; // Colore del testo per i commenti
+                tempCtx.font = commentsFont;
+                tempCtx.textAlign = 'left';
+                tempCtx.textBaseline = 'top';
+                const lines = wrapText(tempCtx, commentsText, saveWidth - commentsPadding * 2);
+                let currentY = saveHeight + commentsPadding;
+                for (const line of lines) {
+                    tempCtx.fillText(line, commentsPadding, currentY);
+                    currentY += commentsLineHeight;
+                }
+            }
+
+
+            const image = tempCanvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = 'schema_calcio.png';
+            link.href = image;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            // Riabilita la visualizzazione degli oggetti HTML
+            objects.forEach(obj => {
+                const objectElement = document.getElementById(obj.id);
+                if (objectElement) objectElement.style.display = 'block';
+            });
+            showMessage("Schema salvato come immagine!");
+        });
+
+        // Funzione per wrappare il testo (utile per i commenti)
+        function wrapText(context, text, maxWidth) {
+            const words = text.split(' ');
+            const lines = [];
+            let currentLine = words[0];
+
+            for (let i = 1; i < words.length; i++) {
+                const word = words[i];
+                const width = context.measureText(currentLine + ' ' + word).width;
+                if (width < maxWidth) {
+                    currentLine += ' ' + word;
+                } else {
+                    lines.push(currentLine);
+                    currentLine = word;
+                }
+            }
+            lines.push(currentLine);
+            return lines;
+        }
+
+
+        // Gestione aggiunta oggetti
+        playerButtons.addEventListener('click', (e) => {
+            if (e.target.classList.contains('player-button')) {
+                const objectType = e.target.dataset.objectType;
+                const emojiMap = {
+                    'ball': '⚽', // Changed to soccer ball emoji
+                    'gate': '🥅',
+                };
+                const emoji = emojiMap[objectType]; // Solo per oggetti con emoji predefiniti
+                const id = `object-${Date.now()}`; // ID univoco per l'oggetto
+
+                const defaultObjectSize = 50; // Dimensione di default per i nuovi oggetti
+                const defaultTextSize = 20; // Dimensione di default per il testo
+
+                // Posiziona l'oggetto al centro del canvas inizialmente (coordinate non scalate)
+                const initialX = BASE_FIELD_WIDTH / 2 - defaultObjectSize / 2;
+                const initialY = BASE_FIELD_HEIGHT / 2 - defaultObjectSize / 2;
+
+                const objectElement = document.createElement('div');
+                objectElement.id = id;
+                objectElement.classList.add('player-icon');
+                objectElement.dataset.type = objectType; // Tipo di oggetto
+
+                let objectObj = {
+                    id: id,
+                    x: initialX,
+                    y: initialY,
+                    type: objectType,
+                    emoji: emoji,
+                    size: defaultObjectSize,
+                    rotation: 0,
+                    color: 'gray' // Colore di default per gli attrezzi generici
+                };
+
+                if (objectType === 'player' || objectType === 'goalkeeper') {
+                    objectObj.number = objectType === 'player' ? playerCounter++ : 'P'; // 'P' per portiere
+                    objectObj.jerseyColor = 'blue'; // Default per i nuovi giocatori
+                    objectObj.textColor = 'white'; // Default per i nuovi giocatori
+
+                    objectElement.style.backgroundColor = objectObj.jerseyColor;
+                    objectElement.style.color = objectObj.textColor;
+                    objectElement.innerHTML = `<span class="player-number">${objectObj.number}</span>`;
+                    objectElement.style.borderRadius = '50%';
+                    objectElement.style.width = `${objectObj.size * currentZoomLevel}px`;
+                    objectElement.style.height = `${objectObj.size * currentZoomLevel}px`;
+                    objectElement.style.fontWeight = 'bold';
+                    objectElement.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+                } else if (objectType === 'cone') {
+                    objectObj.color = 'red'; // Cono rosso di default
+                    objectElement.innerHTML = SVG_CONE;
+                    objectElement.style.color = objectObj.color;
+                    objectElement.style.width = `${objectObj.size * currentZoomLevel}px`;
+                    objectElement.style.height = `${objectObj.size * currentZoomLevel}px`;
+                } else if (objectType === 'ladder') {
+                    objectElement.innerHTML = SVG_LADDER;
+                    objectElement.style.color = objectObj.color;
+                    objectElement.style.width = `${objectObj.size * currentZoomLevel}px`;
+                    objectElement.style.height = `${objectObj.size * currentZoomLevel * (100/60)}px`; // Adjust height for aspect ratio
+                } else if (objectType === 'pole') {
+                    objectElement.style.width = `${5 * currentZoomLevel}px`;
+                    objectElement.style.height = `${50 * currentZoomLevel}px`;
+                    objectElement.style.backgroundColor = objectObj.color;
+                    objectElement.style.borderRadius = `${2 * currentZoomLevel}px`;
+                } else if (objectType === 'obstacle') {
+                    objectElement.innerHTML = SVG_OBSTACLE;
+                    objectElement.style.color = objectObj.color;
+                    objectElement.style.width = `${objectObj.size * currentZoomLevel * 1.5}px`; // Make it wider
+                    objectElement.style.height = `${objectObj.size * currentZoomLevel * 0.75}px`; // Make it shorter
+                } else if (objectType === 'text') {
+                    objectObj.size = defaultTextSize; // Text size is font size
+                    objectObj.text = 'Scrivi qui...'; // Default text content
+                    objectObj.color = 'black'; // Default text color
+                    objectObj.currentWidth = 100; // Default width in unscaled canvas units
+                    objectObj.currentHeight = 50; // Default height in unscaled canvas units
+
+                    objectElement.textContent = objectObj.text;
+                    objectElement.style.fontSize = `${objectObj.size * currentZoomLevel}px`;
+                    objectElement.style.color = objectObj.color;
+                    objectElement.style.width = `${objectObj.currentWidth * currentZoomLevel}px`;
+                    objectElement.style.height = `${objectObj.currentHeight * currentZoomLevel}px`;
+                    objectElement.classList.add('player-icon'); // Assicurati che abbia la classe per lo styling base
+                    objectElement.classList.add('player-icon-text'); // Classe specifica per il testo
+                } else { // Per palla, porta (emoji)
+                    objectElement.textContent = emoji;
+                    objectElement.style.fontSize = `${objectObj.size * currentZoomLevel}px`;
+                    objectElement.style.width = 'auto';
+                    objectElement.style.height = 'auto';
+                    objectElement.style.backgroundColor = 'transparent';
+                    objectElement.style.color = 'inherit';
+                    objectElement.style.border = 'none';
+                    objectElement.style.boxShadow = 'none';
+                    objectElement.style.borderRadius = '0';
+                }
+
+                objectElement.style.left = `${initialX * currentZoomLevel}px`;
+                objectElement.style.top = `${initialY * currentZoomLevel}px`;
+                objectElement.style.transform = `rotate(${objectObj.rotation}deg)`; // Applica rotazione iniziale
+
+                canvas.parentElement.appendChild(objectElement); // Aggiungi al contenitore del canvas
+                objects.push(objectObj);
+                showMessage(`Aggiunto: ${objectType}`);
+                if (isRecording) {
+                    recordFrame(); // Registra l'aggiunta dell'oggetto
+                }
+
+                // Aggiungi listener direttamente all'oggetto creato
+                objectElement.addEventListener('mousedown', handleObjectMousedown);
+                objectElement.addEventListener('touchstart', handleObjectMousedown, { passive: false });
+            }
+        });
+
+        // Gestione selezione tipo di campo
+        fieldTypeSelect.addEventListener('change', () => {
+            drawField();
+            redrawAllElements(); // Ridisegna disegni e oggetti sul nuovo campo
+            showMessage(`Campo selezionato: ${fieldTypeSelect.options[fieldTypeSelect.selectedIndex].text}`);
+        });
+
+        // Gestione zoom campo
+        zoomLevelInput.addEventListener('input', () => {
+            currentZoomLevel = parseFloat(zoomLevelInput.value);
+            zoomLevelValueSpan.textContent = `${Math.round(currentZoomLevel * 100)}%`;
+            resizeCanvas(); // Ridisegna il canvas con il nuovo zoom
+            redrawAllElements(); // Assicura che tutto sia ridisegnato con il nuovo zoom
+            showMessage(`Zoom: ${Math.round(currentZoomLevel * 100)}%`);
+        });
+
+
+        // Gestione registrazione animazione
+        recordButton.addEventListener('click', () => {
+            if (!isRecording) {
+                isRecording = true;
+                animationFrames = []; // Resetta i frame precedenti
+                recordButton.textContent = 'Stop Registrazione';
+                recordButton.classList.remove('bg-purple-500', 'hover:bg-purple-600');
+                recordButton.classList.add('bg-red-500', 'hover:bg-red-600');
+                playButton.disabled = true; // Disabilita play durante la registrazione
+                showMessage("Registrazione avviata...");
+                recordFrame(); // Registra il primo frame
+            } else {
+                isRecording = false;
+                recordButton.textContent = 'Registra Animazione';
+                recordButton.classList.remove('bg-red-500', 'hover:bg-red-600');
+                recordButton.classList.add('bg-purple-500', 'hover:bg-purple-600');
+                playButton.disabled = false; // Abilita play dopo la registrazione
+                showMessage(`Registrazione terminata! ${animationFrames.length} frame registrati.`);
+            }
+        });
+
+        // Gestione riproduzione animazione
+        playButton.addEventListener('click', () => {
+            if (animationInterval) { // Se l'animazione è già in corso, fermala
+                clearInterval(animationInterval);
+                animationInterval = null;
+                playButton.textContent = 'Riproduci Animazione';
+                toggleControls(true);
+                showMessage("Animazione interrotta.");
+            } else {
+                playAnimation();
+                playButton.textContent = 'Ferma Animazione';
+            }
+        });
+    </script>
+</body>
+</html>

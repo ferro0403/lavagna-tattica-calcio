@@ -1,0 +1,51 @@
+{
+    "name": "Lavagna Tattica Calcio",
+    "short_name": "Lavagna Calcio",
+    "description": "Una lavagna tattica interattiva per il calcio, utilizzabile anche offline.",
+    "start_url": "./",
+    "display": "standalone",
+    "background_color": "#f0f4f8",
+    "theme_color": "#3b82f6",
+    "icons": [
+        {
+            "src": "https://placehold.co/72x72/3b82f6/ffffff?text=FT",
+            "sizes": "72x72",
+            "type": "image/png"
+        },
+        {
+            "src": "https://placehold.co/96x96/3b82f6/ffffff?text=FT",
+            "sizes": "96x96",
+            "type": "image/png"
+        },
+        {
+            "src": "https://placehold.co/128x128/3b82f6/ffffff?text=FT",
+            "sizes": "128x128",
+            "type": "image/png"
+        },
+        {
+            "src": "https://placehold.co/144x144/3b82f6/ffffff?text=FT",
+            "sizes": "144x144",
+            "type": "image/png"
+        },
+        {
+            "src": "https://placehold.co/152x152/3b82f6/ffffff?text=FT",
+            "sizes": "152x152",
+            "type": "image/png"
+        },
+        {
+            "src": "https://placehold.co/192x192/3b82f6/ffffff?text=FT",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "https://placehold.co/384x384/3b82f6/ffffff?text=FT",
+            "sizes": "384x384",
+            "type": "image/png"
+        },
+        {
+            "src": "https://placehold.co/512x512/3b82f6/ffffff?text=FT",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
