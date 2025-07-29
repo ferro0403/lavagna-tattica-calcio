@@ -2387,7 +2387,7 @@
                 const objectElement = document.createElement('div');
                 objectElement.id = id;
                 objectElement.classList.add('player-icon');
-                objectElement.dataset.type = objectType; // Tipo di oggetto
+                objectElement.dataset.objectType = objectType; // Usa dataset.objectType per coerenza
 
                 let objectObj = {
                     id: id,
@@ -2446,7 +2446,6 @@
                     objectElement.style.color = objectObj.color;
                     objectElement.style.width = `${objectObj.currentWidth * currentZoomLevel}px`;
                     objectElement.style.height = `${objectObj.currentHeight * currentZoomLevel}px`;
-                    objectElement.classList.add('player-icon'); // Assicurati che abbia la classe per lo styling base
                     objectElement.classList.add('player-icon-text'); // Classe specifica per il testo
                 } else { // Per palla, porta (emoji)
                     objectElement.textContent = emoji;
@@ -2464,7 +2463,8 @@
                 objectElement.style.top = `${initialY * currentZoomLevel}px`;
                 objectElement.style.transform = `rotate(${objectObj.rotation}deg)`; // Applica rotazione iniziale
 
-                canvas.parentElement.appendChild(objectElement); // Aggiungi al contenitore del canvas
+                // Aggiungi l'elemento al contenitore del canvas, non direttamente al canvas
+                canvas.parentElement.appendChild(objectElement); 
                 objects.push(objectObj);
                 showMessage(`Aggiunto: ${objectType}`);
                 if (isRecording) {
