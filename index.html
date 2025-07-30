@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lavagna Tattica di Calcio</title>
-    <!-- Meta tag per PWA -->
-    <link rel="manifest" href="manifest.json">
+    <!-- Meta tag per PWA (rimosse le dipendenze dal service worker) -->
+    <!-- <link rel="manifest" href="manifest.json"> -->
     <meta name="theme-color" content="#3b82f6"> <!-- Colore della barra del browser su Android -->
     <link rel="apple-touch-icon" href="icons/icon-192x192.png"> <!-- Icona per iOS -->
 
@@ -712,7 +712,7 @@
                 const penaltyBoxDepth = currentCanvasWidth * 0.25;
                 const penaltyBoxWidth = currentCanvasHeight * 0.6;
                 const penaltyBoxX = currentCanvasWidth - penaltyBoxDepth;
-                const penaltyBoxY = currentCanvasHeight / 2 - penaltyBoxWidth / 2;
+                const penaltyBoxY = currentCanvasWidth / 2 - penaltyBoxWidth / 2;
 
                 // Goal area dimensions
                 const goalAreaDepth = currentCanvasWidth * 0.08;
@@ -1661,7 +1661,8 @@
             });
             resizeObserver.observe(canvas.parentElement);
 
-            // Registra il Service Worker
+            // Rimosso il codice di registrazione del Service Worker
+            /*
             if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.register('service-worker.js')
                     .then(registration => {
@@ -1672,6 +1673,7 @@
                         showMessage('Errore nella preparazione offline.');
                     });
             }
+            */
         });
 
         // Gestione eventi mouse/touch sul canvas (solo per il disegno, gli oggetti hanno i loro listener)
