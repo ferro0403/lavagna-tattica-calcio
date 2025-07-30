@@ -510,8 +510,8 @@
         let objects = []; // Array per memorizzare tutti gli oggetti (giocatori, coni, ecc.)
         let draggingObject = null;
         let selectedObject = null; // Oggetto HTML attualmente selezionato per il ridimensionamento/rotazione/colore
-        let objectOffsetX = 0; // Offset del mouse rispetto al centro dell'oggetto (in coordinate del canvas non scalate)
-        let objectOffsetY = 0; // Offset del mouse rispetto al centro dell'oggetto (in coordinate del canvas non scalate)
+        let objectOffsetX = 0; // Offset del mouse rispetto al centro dell'oggetto (in coordinate dello schermo)
+        let objectOffsetY = 0; // Offset del mouse rispetto al centro dell'oggetto (in coordinate dello schermo)
         
         let selectedDrawing = null; // Disegno canvas attualmente selezionato
         let draggingDrawing = null; // Disegno canvas attualmente trascinato
@@ -1308,7 +1308,7 @@
             ctxToDrawOn.beginPath();
             ctxToDrawOn.moveTo(toX + offsetX, toY - offsetY);
             ctxToDrawOn.lineTo(toX + offsetX - headlen * Math.cos(angle - Math.PI / 6), toY - offsetY - headlen * Math.sin(angle - Math.PI / 6));
-            ctxToDrawOn.lineTo(toX + offsetX - headlen * Math.cos(angle + Math.PI / 6), toY - offsetY - headlen * Math.sin(angle + Math.PI / 6));
+            ctxToDrawOn.lineTo(toX + offsetX - headlen * Math.cos(angle + Math.PI / 6), toY + offsetY - headlen * Math.sin(angle + Math.PI / 6));
             ctxToDrawOn.closePath(); // Chiudi il percorso per formare un triangolo
             ctxToDrawOn.fill(); // Riempi la punta della freccia
             ctxToDrawOn.stroke(); // Traccia il contorno
@@ -1410,11 +1410,20 @@
                     draggingObject = selectedObject;
                     targetElement.classList.add('dragging');
 
-                    const { x, y } = getCoordinates(e); // Mouse position in unscaled canvas coordinates
+                    let clientX, clientY;
+                    if (e.touches && e.touches.length > 0) {
+                        clientX = e.touches[0].clientX;
+                        clientY = e.touches[0].clientY;
+                    } else {
+                        clientX = e.clientX;
+                        clientY = e.clientY;
+                    }
 
-                    // Calculate offset from mouse to object's center (obj.x, obj.y are now center coordinates)
-                    objectOffsetX = x - selectedObject.x;
-                    objectOffsetY = y - selectedObject.y;
+                    // Calculate offset from mouse click (viewport) to object's center (viewport)
+                    // The CSS transform: translate(-50%, -50%) means the element's (left, top) is its center.
+                    // So, clientX/Y - targetElement.getBoundingClientRect().left/top gives the offset from the element's center.
+                    objectOffsetX = clientX - targetElement.getBoundingClientRect().left;
+                    objectOffsetY = clientY - targetElement.getBoundingClientRect().top;
 
                     // Attach global listeners for dragging
                     document.addEventListener('mousemove', dragObject);
@@ -1435,49 +1444,42 @@
             if (!draggingObject) return;
             e.preventDefault(); // Prevents default touch/mouse actions like scrolling
 
-            const { x, y } = getCoordinates(e); // Current mouse position in unscaled canvas coordinates
-
-            // Calculate new object position based on mouse position and initial offset
-            let newX = x - objectOffsetX;
-            let newY = y - objectOffsetY;
-
-            // Get actual dimensions of the HTML element to correctly clamp its position
-            const objectElement = document.getElementById(draggingObject.id);
-            let currentObjWidth = 0;
-            let currentObjHeight = 0;
-
-            if (draggingObject.type === 'text') {
-                // For text, use its current rendered dimensions (which might be affected by contenteditable resize)
-                currentObjWidth = objectElement.offsetWidth / currentZoomLevel;
-                currentObjHeight = objectElement.offsetHeight / currentZoomLevel;
-            } else if (draggingObject.type === 'pole') {
-                currentObjWidth = 5;
-                currentObjHeight = 50;
-            } else if (draggingObject.type === 'obstacle') {
-                currentObjWidth = draggingObject.size * 1.5;
-                currentObjHeight = draggingObject.size * 0.75;
-            } else if (draggingObject.type === 'ladder') {
-                currentObjWidth = draggingObject.size;
-                currentObjHeight = draggingObject.size * (100/60);
+            const canvasRect = canvas.getBoundingClientRect(); // Get current canvas screen dimensions
+            let clientX, clientY;
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
             } else {
-                // For other objects (player, ball, cone, gate), use their 'size' property
-                currentObjWidth = draggingObject.size;
-                currentObjHeight = draggingObject.size;
+                clientX = e.clientX;
+                clientY = e.clientY;
             }
 
-            // Clamp newX and newY to ensure the object's *center* stays within canvas bounds
-            const halfWidth = currentObjWidth / 2;
-            const halfHeight = currentObjHeight / 2;
+            // Calculate desired object center position in screen pixels, relative to the canvas's top-left corner
+            // clientX/Y is viewport coordinate. canvasRect.left/top is canvas top-left in viewport.
+            // objectOffsetX/Y is offset from mouse to object's CSS (left,top) point.
+            let newCenterX_screen_relative_to_canvas = (clientX - canvasRect.left) - objectOffsetX;
+            let newCenterY_screen_relative_to_canvas = (clientY - canvasRect.top) - objectOffsetY;
 
-            newX = Math.max(halfWidth, Math.min(newX, BASE_FIELD_WIDTH - halfWidth));
-            newY = Math.max(halfHeight, Math.min(newY, BASE_FIELD_HEIGHT - halfHeight));
+            const objectElement = document.getElementById(draggingObject.id);
+            let currentObjWidth_screen = objectElement.offsetWidth;
+            let currentObjHeight_screen = objectElement.offsetHeight;
 
-            draggingObject.x = newX;
-            draggingObject.y = newY;
+            // Clamp newCenterX_screen_relative_to_canvas and newCenterY_screen_relative_to_canvas
+            // to ensure the object's *edges* stay within canvas screen bounds.
+            const halfWidth_screen = currentObjWidth_screen / 2;
+            const halfHeight_screen = currentObjHeight_screen / 2;
 
-            // Update the CSS position of the HTML element
-            objectElement.style.left = `${newX * currentZoomLevel + canvasVisualOffsetX}px`;
-            objectElement.style.top = `${newY * currentZoomLevel + canvasVisualOffsetY}px`;
+            newCenterX_screen_relative_to_canvas = Math.max(halfWidth_screen, Math.min(newCenterX_screen_relative_to_canvas, canvasRect.width - halfWidth_screen));
+            newCenterY_screen_relative_to_canvas = Math.max(halfHeight_screen, Math.min(newCenterY_screen_relative_to_canvas, canvasRect.height - halfHeight_screen));
+
+            // Convert clamped screen center coordinates back to logical canvas center coordinates
+            draggingObject.x = newCenterX_screen_relative_to_canvas * (BASE_FIELD_WIDTH / canvasRect.width);
+            draggingObject.y = newCenterY_screen_relative_to_canvas * (BASE_FIELD_HEIGHT / canvasRect.height);
+
+            // Update the CSS left/top of the HTML element. These values are the desired center position
+            // relative to the parent (canvas.parentElement)
+            objectElement.style.left = `${newCenterX_screen_relative_to_canvas + canvasVisualOffsetX}px`;
+            objectElement.style.top = `${newCenterY_screen_relative_to_canvas + canvasVisualOffsetY}px`;
 
             if (isRecording) {
                 recordFrame();
@@ -2384,11 +2386,11 @@
 
                 // Calcola il centro della porzione visibile del canvas in coordinate logiche
                 const canvasRect = canvas.getBoundingClientRect();
-                const centerX_screen_pixels = canvasRect.width / 2;
-                const centerY_screen_pixels = canvasRect.height / 2;
+                const centerX_screen_pixels_relative_to_canvas = canvasRect.width / 2;
+                const centerY_screen_pixels_relative_to_canvas = canvasRect.height / 2;
 
-                const initialX_logical = centerX_screen_pixels * (BASE_FIELD_WIDTH / canvasRect.width);
-                const initialY_logical = centerY_screen_pixels * (BASE_FIELD_HEIGHT / canvasRect.height);
+                const initialX_logical = centerX_screen_pixels_relative_to_canvas * (BASE_FIELD_WIDTH / canvasRect.width);
+                const initialY_logical = centerY_screen_pixels_relative_to_canvas * (BASE_FIELD_HEIGHT / canvasRect.height);
 
                 let objectObj = {
                     x: initialX_logical, // Posiziona al centro della vista corrente
