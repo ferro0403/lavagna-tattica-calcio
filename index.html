@@ -1660,20 +1660,6 @@
                 resizeCanvas();
             });
             resizeObserver.observe(canvas.parentElement);
-
-            // Rimosso il codice di registrazione del Service Worker
-            /*
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('service-worker.js')
-                    .then(registration => {
-                        showMessage('App pronta per l\'uso offline!');
-                    })
-                    .catch(error => {
-                        console.error('Registrazione Service Worker fallita:', error);
-                        showMessage('Errore nella preparazione offline.');
-                    });
-            }
-            */
         });
 
         // Gestione eventi mouse/touch sul canvas (solo per il disegno, gli oggetti hanno i loro listener)
@@ -2109,7 +2095,7 @@
                 const penaltyBoxDepth = currentCanvasWidth * 0.25;
                 const penaltyBoxWidth = currentCanvasHeight * 0.6;
                 const penaltyBoxX = currentCanvasWidth - penaltyBoxDepth;
-                const penaltyBoxY = currentCanvasHeight / 2 - penaltyBoxWidth / 2;
+                const penaltyBoxY = currentCanvasWidth / 2 - penaltyBoxWidth / 2;
 
                 const goalAreaDepth = currentCanvasWidth * 0.08;
                 const goalAreaWidth = currentCanvasHeight * 0.3;
@@ -2396,10 +2382,17 @@
                 const defaultObjectSize = 25; // Dimensione di default ridotta per i nuovi oggetti
                 const defaultTextSize = 12;   // Dimensione di default ridotta per il testo
 
+                // Calcola il centro della porzione visibile del canvas in coordinate logiche
+                const canvasRect = canvas.getBoundingClientRect();
+                const centerX_screen_pixels = canvasRect.width / 2;
+                const centerY_screen_pixels = canvasRect.height / 2;
+
+                const initialX_logical = centerX_screen_pixels * (BASE_FIELD_WIDTH / canvasRect.width);
+                const initialY_logical = centerY_screen_pixels * (BASE_FIELD_HEIGHT / canvasRect.height);
+
                 let objectObj = {
-                    // Calcola la posizione centrale nel canvas logico
-                    x: BASE_FIELD_WIDTH / 2,
-                    y: BASE_FIELD_HEIGHT / 2,
+                    x: initialX_logical, // Posiziona al centro della vista corrente
+                    y: initialY_logical, // Posiziona al centro della vista corrente
                     id: id,
                     type: objectType,
                     emoji: emoji,
