@@ -350,7 +350,7 @@
 
                 <div class="slider-container flex-col items-start gap-2">
                     <label for="object-size" class="text-gray-700 font-semibold">Dimensione Oggetto:</label>
-                    <input type="range" id="object-size" min="20" max="80" value="50">
+                    <input type="range" id="object-size" min="10" max="80" value="50">
                     <span id="object-size-value" class="text-gray-600">50px</span>
                 </div>
 
@@ -439,7 +439,7 @@
                     Salva Immagine
                 </button>
                 <button id="record-button" class="action-button bg-purple-500 text-white hover:bg-purple-600">
-                    <svg xmlns="http://www.w3.org/2000/24/24" fill="currentColor" class="w-5 h-5">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5">
                         <path fill-rule="evenodd" d="M1.5 6a2.25 2.25 0 0 1 2.25-2.25h16.5A2.25 2.25 0 0 1 22.5 6v12a2.25 2.25 0 0 1-2.25 2.25H3.75A2.25 2.25 0 0 1 1.5 18V6ZM3 16.06V18c0 .414.336.75.75.75h16.5A.75.75 0 0 0 21 18v-1.94l-2.69-2.69a1.5 1.5 0 0 0-2.12 0l-.88.879.97.97a.75.75 0 1 1-1.06 1.06l-5.695-5.695a1.5 1.5 0 0 0-2.12 0L3 16.061Zm10.125-7.81a1.125 1.125 0 1 1 2.25 0 1.125 1.125 0 0 1-2.25 0Z" clip-rule="evenodd" />
                     </svg>
                     Registra Animazione
@@ -511,8 +511,8 @@
         let objects = []; // Array per memorizzare tutti gli oggetti (giocatori, coni, ecc.)
         let draggingObject = null;
         let selectedObject = null; // Oggetto HTML attualmente selezionato per il ridimensionamento/rotazione/colore
-        let objectOffsetX = 0; // Offset del mouse rispetto al centro dell'oggetto (in coordinate dello schermo)
-        let objectOffsetY = 0; // Offset del mouse rispetto al centro dell'oggetto (in coordinate dello schermo)
+        let objectOffsetX_logical = 0; // Offset del mouse rispetto al centro dell'oggetto (in coordinate LOGICHE)
+        let objectOffsetY_logical = 0; // Offset del mouse rispetto al centro dell'oggetto (in coordinate LOGICHE)
         
         let selectedDrawing = null; // Disegno canvas attualmente selezionato
         let draggingDrawing = null; // Disegno canvas attualmente trascinato
@@ -1411,20 +1411,10 @@
                     draggingObject = selectedObject;
                     targetElement.classList.add('dragging');
 
-                    let clientX, clientY;
-                    if (e.touches && e.touches.length > 0) {
-                        clientX = e.touches[0].clientX;
-                        clientY = e.touches[0].clientY;
-                    } else {
-                        clientX = e.clientX;
-                        clientY = e.clientY;
-                    }
-
-                    // Calculate offset from mouse click (viewport) to object's center (viewport)
-                    // The CSS transform: translate(-50%, -50%) means the element's (left, top) is its center.
-                    // So, clientX/Y - targetElement.getBoundingClientRect().left/top gives the offset from the element's center.
-                    objectOffsetX = clientX - targetElement.getBoundingClientRect().left;
-                    objectOffsetY = clientY - targetElement.getBoundingClientRect().top;
+                    // Calcola l'offset del clic rispetto al centro dell'oggetto in coordinate LOGICHE del canvas
+                    const { x: clickLogicalX, y: clickLogicalY } = getCoordinates(e);
+                    objectOffsetX_logical = clickLogicalX - selectedObject.x;
+                    objectOffsetY_logical = clickLogicalY - selectedObject.y;
 
                     // Attach global listeners for dragging
                     document.addEventListener('mousemove', dragObject);
@@ -1445,42 +1435,38 @@
             if (!draggingObject) return;
             e.preventDefault(); // Prevents default touch/mouse actions like scrolling
 
-            const canvasRect = canvas.getBoundingClientRect(); // Get current canvas screen dimensions
-            let clientX, clientY;
-            if (e.touches && e.touches.length > 0) {
-                clientX = e.touches[0].clientX;
-                clientY = e.touches[0].clientY;
+            // Get current mouse/touch coordinates in logical canvas units
+            const { x: currentLogicalX, y: currentLogicalY } = getCoordinates(e);
+
+            // Calculate desired logical center of the object
+            let desiredObjLogicalX = currentLogicalX - objectOffsetX_logical;
+            let desiredObjLogicalY = currentLogicalY - objectOffsetY_logical;
+
+            // Get object's logical half-dimensions for clamping
+            let objLogicalHalfWidth, objLogicalHalfHeight;
+            if (draggingObject.type === 'text') {
+                objLogicalHalfWidth = draggingObject.currentWidth / 2;
+                objLogicalHalfHeight = draggingObject.currentHeight / 2;
+            } else if (draggingObject.type === 'pole') {
+                objLogicalHalfWidth = 5 / 2; // Pole has fixed logical width
+                objLogicalHalfHeight = 50 / 2; // Pole has fixed logical height
+            } else if (draggingObject.type === 'obstacle') {
+                objLogicalHalfWidth = (draggingObject.size * 1.5) / 2; // Obstacle is wider
+                objLogicalHalfHeight = (draggingObject.size * 0.75) / 2; // Obstacle is shorter
+            } else if (draggingObject.type === 'ladder') {
+                objLogicalHalfWidth = draggingObject.size / 2;
+                objLogicalHalfHeight = (draggingObject.size * (100/60)) / 2;
             } else {
-                clientX = e.clientX;
-                clientY = e.clientY;
+                objLogicalHalfWidth = draggingObject.size / 2;
+                objLogicalHalfHeight = draggingObject.size / 2;
             }
 
-            // Calculate desired object center position in screen pixels, relative to the canvas's top-left corner
-            // clientX/Y is viewport coordinate. canvasRect.left/top is canvas top-left in viewport.
-            // objectOffsetX/Y is offset from mouse to object's CSS (left,top) point.
-            let newCenterX_screen_relative_to_canvas = (clientX - canvasRect.left) - objectOffsetX;
-            let newCenterY_screen_relative_to_canvas = (clientY - canvasRect.top) - objectOffsetY;
+            // Clamp logical coordinates within BASE_FIELD_WIDTH/HEIGHT
+            draggingObject.x = Math.max(objLogicalHalfWidth, Math.min(desiredObjLogicalX, BASE_FIELD_WIDTH - objLogicalHalfWidth));
+            draggingObject.y = Math.max(objLogicalHalfHeight, Math.min(desiredObjLogicalY, BASE_FIELD_HEIGHT - objLogicalHalfHeight));
 
-            const objectElement = document.getElementById(draggingObject.id);
-            let currentObjWidth_screen = objectElement.offsetWidth;
-            let currentObjHeight_screen = objectElement.offsetHeight;
-
-            // Clamp newCenterX_screen_relative_to_canvas and newCenterY_screen_relative_to_canvas
-            // to ensure the object's *edges* stay within canvas screen bounds.
-            const halfWidth_screen = currentObjWidth_screen / 2;
-            const halfHeight_screen = currentObjHeight_screen / 2;
-
-            newCenterX_screen_relative_to_canvas = Math.max(halfWidth_screen, Math.min(newCenterX_screen_relative_to_canvas, canvasRect.width - halfWidth_screen));
-            newCenterY_screen_relative_to_canvas = Math.max(halfHeight_screen, Math.min(newCenterY_screen_relative_to_canvas, canvasRect.height - halfHeight_screen));
-
-            // Convert clamped screen center coordinates back to logical canvas center coordinates
-            draggingObject.x = newCenterX_screen_relative_to_canvas * (BASE_FIELD_WIDTH / canvasRect.width);
-            draggingObject.y = newCenterY_screen_relative_to_canvas * (BASE_FIELD_HEIGHT / canvasRect.height);
-
-            // Update the CSS left/top of the HTML element. These values are the desired center position
-            // relative to the parent (canvas.parentElement)
-            objectElement.style.left = `${newCenterX_screen_relative_to_canvas + canvasVisualOffsetX}px`;
-            objectElement.style.top = `${newCenterY_screen_relative_to_canvas + canvasVisualOffsetY}px`;
+            // Redraw all elements to update the visual position of the dragged object
+            redrawAllElements();
 
             if (isRecording) {
                 recordFrame();
@@ -2382,8 +2368,8 @@
                 const id = `object-${Date.now()}`; // ID univoco per l'oggetto
 
                 // Riduzione delle dimensioni di default per una migliore visualizzazione mobile
-                const defaultObjectSize = 25; // Dimensione di default ridotta per i nuovi oggetti
-                const defaultTextSize = 12;   // Dimensione di default ridotta per il testo
+                const defaultObjectSize = 15; // Dimensione di default ridotta per i nuovi oggetti
+                const defaultTextSize = 8;   // Dimensione di default ridotta per il testo
 
                 // Calcola il centro della porzione visibile del canvas in coordinate logiche
                 const canvasRect = canvas.getBoundingClientRect();
